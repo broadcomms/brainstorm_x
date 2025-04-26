@@ -37,11 +37,11 @@ app/
     agent/
         routes.py
         templates/
-            agent_chat.html
+            assistant.html
     chat/
         routes.py
         templates/
-            room_chat.html
+            chat_room.html
     services/
         agenda.py
         tip.py
