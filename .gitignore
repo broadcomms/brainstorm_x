@@ -172,3 +172,24 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# VS Code settings
+.vscode/
+# VS Code workspace settings
+.vscode.code-workspace
+# VS Code Jupyter Notebook settings
+.vscode/jupyter_notebook_config.py
+
+# MacOS Finder files
+.DS_Store
+# macOS system files
+.AppleDouble
+.LSOverride
+# Icon must end with two \r
+Icon
+
+# Virtualenv
+.venv/
+
+# dotenv
+.env
