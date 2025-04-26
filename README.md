@@ -11,7 +11,7 @@ The application is implemented with Python and JavaScript using Flask, LangChain
 
 ## Structure
 
-```mermaid
+```
 app/
     __init__.py
     config.py
