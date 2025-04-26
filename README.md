@@ -49,3 +49,22 @@ app/
 requirements.txt
 run.py # <-- Entry point % python run.py
 ```
+
+# Initialize Virtual environment
+```
+# ensure you are in the project root
+cd brainstorm_x
+
+# create virtual environment
+python3 -m venv venv
+
+# activate virtual environment
+source venv/bin/activate
+
+# upgrade package manager
+pip install -upgrade pip
+
+# install project requirements
+pip install -r requirements.txt
+
+```
