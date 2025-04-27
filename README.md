@@ -11,6 +11,125 @@ The application is implemented with Python and JavaScript using Flask, LangChain
 
 ## Structure
 
-```mermaid
+```
+app/
+    __init__.py
+    config.py
+    models.py
+    extensions.py
+    sockets.py
+    main/
+        routes.py
+        templates/
+            main_template.html
+            main_index.html
+    auth/
+        routes.py
+        templates/
+            auth_login.html
+            auth_password.html
+            auth_reset.html
+    account/
+        routes.py
+        templates/
+            account_form.html
+            account_create.html
+            account_edit.html
+            account_list.html
+            account_details.html
+    workspace/
+        routes.py
+        templates/
+            workspace_form.html
+            workspace_create.html
+            workspace_edit.html
+            workspace_list.html
+            workspace_details.html
+    document/
+        routes.py
+        templates/
+            document_upload.html
+            document_list.html
+            document_details.html
+            
+    workshop/
+        routes.py
+        templates/
+            workshop_form.html
+            workshop_create.html
+            workshop_edit.html
+            workshop_list.html
+            workshop_details.html
+            workshop_lobby.html
+            workshop_room.html
+            workshop_report.html
+    chat/
+        routes.py
+        templates/
+            chat_room.html
+    service/
+        routes/
+            agenda.py
+            plan.py
+            rules.py
+            icebreaker.py
+            tip.py
+            task.py
+            nudge.py
+            vote.py
+            idea.py
+            agent.py
+        templates/
+            service_agenda.html
+            service_plan.html
+            service_rules.html
+            service_tip.html
+            service_icebreaker.html
+            service_task.html
+            service_nudge.html
+            service_vote.html
+            service_idea.html
+            service_agent.html
+instance
+   app_database.sqlite
+   agent_memory.sqlite
+   documents/
+            _sample.png 
+            _sample.pdf
+            _sample.docx
+            _sample.pptx
+            _sample.xlsx
+   default/
+            _profile.png
+   uploads/
+requirements.txt
+run.py
+```
 
+# Initialize Virtual environment
+```
+# ensure you are in the project root
+cd brainstorm_x
+
+# create virtual environment
+python3 -m venv venv
+
+# activate virtual environment
+source venv/bin/activate
+
+# upgrade package manager
+pip install -upgrade pip
+
+# install project requirements
+pip install -r requirements.txt
+
+```
+
+# Create The Project Structure
+```
+# ensure script is executable
+chmod +x create_structure.sh
+
+# run script
+./create_structure.sh
 ```
