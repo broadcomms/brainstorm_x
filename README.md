@@ -21,8 +21,37 @@ app/
     main/
         routes.py
         templates/
-            base.html
-            index.html
+            main_template.html
+            main_index.html
+    auth/
+        routes.py
+        templates/
+            auth_login.html
+            auth_password.html
+            auth_reset.html
+    account/
+        routes.py
+        templates/
+            account_form.html
+            account_create.html
+            account_edit.html
+            account_list.html
+            account_details.html
+    workspace/
+        routes.py
+        templates/
+            workspace_form.html
+            workspace_create.html
+            workspace_edit.html
+            workspace_list.html
+            workspace_details.html
+    document/
+        routes.py
+        templates/
+            document_upload.html
+            document_list.html
+            document_details.html
+            
     workshop/
         routes.py
         templates/
@@ -34,20 +63,47 @@ app/
             workshop_lobby.html
             workshop_room.html
             workshop_report.html
-    agent/
-        routes.py
-        templates/
-            assistant.html
     chat/
         routes.py
         templates/
             chat_room.html
-    services/
-        agenda.py
-        tip.py
-
+    service/
+        routes/
+            agenda.py
+            plan.py
+            rules.py
+            icebreaker.py
+            tip.py
+            task.py
+            nudge.py
+            vote.py
+            idea.py
+            agent.py
+        templates/
+            service_agenda.html
+            service_plan.html
+            service_rules.html
+            service_tip.html
+            service_icebreaker.html
+            service_task.html
+            service_nudge.html
+            service_vote.html
+            service_idea.html
+            service_agent.html
+instance
+   app_database.sqlite
+   agent_memory.sqlite
+   documents/
+            _sample.png 
+            _sample.pdf
+            _sample.docx
+            _sample.pptx
+            _sample.xlsx
+   default/
+            _profile.png
+   uploads/
 requirements.txt
-run.py # <-- Entry point % python run.py
+run.py
 ```
 
 # Initialize Virtual environment
@@ -67,4 +123,13 @@ pip install -upgrade pip
 # install project requirements
 pip install -r requirements.txt
 
+```
+
+# Create The Project Structure
+```
+# ensure script is executable
+chmod +x create_structure.sh
+
+# run script
+./create_structure.sh
 ```
