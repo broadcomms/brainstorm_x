@@ -1,0 +1,96 @@
+<!-- app/account/templates/account_create.html -->
+{% extends "main_template.html" %}
+{% block title %}Registration{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Registration</h2>
+    <form method="POST" action="{{ url_for('auth_bp.register') }}">
+        <!-- Username (optional) -->
+        <!--div class="mb-3">
+            <label class="form-label">Username:</label>
+            <input type="text" name="username" class="form-control" autocomplete="current-username">
+        </div-->
+
+        <!-- Email (required) -->
+        <div class="mb-3">
+            <label class="form-label">Email:</label>
+            <input type="email" name="email" class="form-control" required autocomplete="current-email">
+        </div>
+
+        <!-- Password (required) -->
+        <div class="mb-3">
+            <label class="form-label">Password:</label>
+            <input type="password" name="password" class="form-control" required autocomplete="current-password">
+        </div>
+
+        <!-- Additional fields -->
+        <div class="mb-3">
+            <label class="form-label">First Name:</label>
+            <input type="text" name="first_name" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Last Name:</label>
+            <input type="text" name="last_name" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Job Title:</label>
+            <input type="text" name="job_title" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Organization:</label>
+            <input type="text" name="organization" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Phone Number:</label>
+            <input type="text" name="phone_number" class="form-control">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Register</button>
+    </form>
+    <p class="mt-3">
+        Already have an account? <a href="{{ url_for('auth_bp.login') }}">Login here</a>
+    </p>
+</div>
+
+
+
+<script>
+    // DEBUG SCRIPT # TODO: Remove this when ready
+    document.addEventListener('DOMContentLoaded', function () {
+   
+        console.log('Registration auto-fill script loaded.');
+        // Function to toggle auto-fill
+        window.toggleAutoFillRegistration = function (enable) {
+            localStorage.setItem('autoFillRegistration', enable);
+            console.log('Auto-fill registration ' + (enable ? 'enabled' : 'disabled'));
+            applyAutoFill(); // Call applyAutoFill after toggling
+        };
+
+        function applyAutoFill() {
+            const autoFillEnabled = localStorage.getItem('autoFillRegistration') === 'true';
+
+            if (autoFillEnabled) {
+                document.querySelector('input[name="email"]').value = 'demo.user@ai.broadcomms.net';
+                document.querySelector('input[name="password"]').value = 'DemoP@ss123';
+                document.querySelector('input[name="first_name"]').value = 'Demo';
+                document.querySelector('input[name="last_name"]').value = 'User';
+                document.querySelector('input[name="job_title"]').value = 'Developer';
+                document.querySelector('input[name="organization"]').value = 'Acme Corporation';
+                document.querySelector('input[name="phone_number"]').value = '444-999-5555';
+            }
+        }
+
+        applyAutoFill(); // Initial application of auto-fill
+
+        console.log('Registration auto-fill script loaded. Use toggleAutoFillRegistration(true) to enable or toggleAutoFillRegistration(false) to disable.');
+
+        // Default for development
+        toggleAutoFillRegistration(true)
+ 
+    });
+
+
+</script>
+
+{% endblock %}

@@ -1,0 +1,54 @@
+<!-- app/templates/workspace_list.html -->
+{% extends "base.html" %}
+{% block title %}Workspaces{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>My Workspaces</h2>
+  <a href="{{ url_for('workspace_bp.create_workspace') }}" class="btn btn-primary mb-3">
+    Create Workspace
+  </a>
+
+  <!-- Workspaces I'm in -->
+  {% if my_workspaces %}
+    <ul class="list-group mb-4">
+      {% for workspace in my_workspaces %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ workspace.name }}</strong>
+            {% if workspace.is_private %}
+              <span class="badge bg-secondary ms-2">Private</span>
+            {% else %}
+              <span class="badge bg-info text-dark ms-2">Public</span>
+            {% endif %}
+          </div>
+          <a href="{{ url_for('workspace_bp.view_workspace', workspace_id=workspace.workspace_id) }}"
+             class="btn btn-sm btn-outline-primary">
+            View
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>You are not a member of any workspaces.</p>
+  {% endif %}
+
+  <!-- Public workspaces I'm not in -->
+  <h3>Public Workspaces</h3>
+  {% if public_workspaces %}
+    <ul class="list-group">
+      {% for workspace in public_workspaces %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <strong>{{ workspace.name }}</strong>
+          <form action="{{ url_for('workspace_bp.request_join', workspace_id=workspace.workspace_id) }}" method="POST">
+            <button class="btn btn-sm btn-success">Request to Join</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No public workspaces are available (or you've joined them all).</p>
+  {% endif %}
+</div>
+
+{% endblock %}

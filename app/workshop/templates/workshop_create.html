@@ -1,0 +1,44 @@
+<!-- app/workshop/templates/create_workshop.html -->
+{% extends "base.html" %}
+{% block title %}Create Workshop{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    {# --- Adjust heading based on context --- #}
+    {% if workspace %}
+        <h2>Create New Workshop in "{{ workspace.name }}"</h2>
+        {# Action points to the specific workspace creation route #}
+        <form action="{{ url_for('workshop_bp.create_workshop_specific', workspace_id=workspace.workspace_id) }}" method="POST">
+    {% else %}
+        <h2>Create New Workshop</h2>
+        {# Action points to the general creation route #}
+        <form action="{{ url_for('workshop_bp.create_workshop_general') }}" method="POST">
+    {% endif %}
+    <hr>
+
+        
+        {% include '_workshop_form.html' %}
+
+    
+        <button type="submit" class="btn btn-primary">Create Workshop</button>
+
+        {# --- Adjust Cancel button link --- #}
+        {% if workspace %}
+            <a href="{{ url_for('workspace_bp.view_workspace', workspace_id=workspace.workspace_id) }}" class="btn btn-secondary">Cancel</a>
+        {% else %}
+             {# Link back to the workshop list if creating generally #}
+            <a href="{{ url_for('workshop_bp.list_workshops') }}" class="btn btn-secondary">Cancel</a>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include base scripts if any #}
+
+
+
+
+
+
+{% endblock %}

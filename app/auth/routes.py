@@ -136,7 +136,7 @@ def register():
     # Render registration form (optionally, pass along invitation_token and workspace_id to the template)
     invitation_token = request.args.get("invitation_token")
     workspace_id = request.args.get("workspace_id")
-    return render_template("register.html", invitation_token=invitation_token, workspace_id=workspace_id)
+    return render_template("account_create.html", invitation_token=invitation_token, workspace_id=workspace_id)
 
 ########################################################
 # Email Verification
@@ -197,7 +197,6 @@ def verify_email(token):
 ########################################################
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
-    # at top of login()
     next_page = request.args.get('next') or url_for("account_bp.account")
     """
     Email-based login.
@@ -225,7 +224,7 @@ def login():
         flash("Logged in successfully.", "success")
         return redirect(next_page)
 
-    return render_template("login.html")
+    return render_template("auth_login.html")
 
 ########################################################
 # Logout
@@ -271,7 +270,7 @@ def forgot_password():
         flash("If that email exists, a reset link has been sent.", "info")
         return redirect(url_for("auth_bp.login"))
 
-    return render_template("forgot_password.html")
+    return render_template("auth_password.html")
 
 ########################################################
 # Password Reset - Process

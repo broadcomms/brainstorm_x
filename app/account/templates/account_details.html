@@ -1,0 +1,168 @@
+<!-- app/account/templates/account.html -->
+{% extends "main_template.html" %}
+{% block title %}Account{% endblock %}
+
+{% block content %}
+<div class="container-fluid dashboard">
+  <div class="row">
+    <!-- Sidebar: User Profile and Quick Stats -->
+    <div class="col-md-3 mb-3">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body text-center">
+
+          <img
+            src="{{ url_for('static', filename=user.profile_pic_url) or url_for('static', filename='default-profile.png') }}"
+            alt="Profile Picture"
+            class="img-fluid rounded-circle mb-3"
+            style="width: 100px; height: 100px; object-fit: cover;"
+          />
+          <h5 class="card-title">{{ user.first_name }} {{ user.last_name }}</h5>
+          <p class="text-muted mb-3">{{ user.email }}</p>
+
+          <div class="d-grid gap-2">
+            <a href="{{ url_for('profile_bp.update_photo') }}" class="btn btn-sm btn-outline-primary">Update Photo</a>
+            <a href="{{ url_for('profile_bp.edit_account') }}" class="btn btn-sm btn-outline-secondary">Edit Account</a>
+            <a href="{{ url_for('profile_bp.change_password') }}" class="btn btn-sm btn-outline-warning">Change Password</a>
+            <a href="{{ url_for('auth_bp.logout') }}" class="btn btn-sm btn-outline-danger">Logout</a>
+          </div>
+        </div>
+      </div>
+
+
+    </div>
+
+    <!-- Main Dashboard Area -->
+    <div class="col-md-9">
+
+      {% if pending_invitations|length > 0 %}
+  <div class="alert alert-info">
+    <strong>You have pending workspace invitations:</strong>
+    <ul>
+      {% for inv in pending_invitations %}
+        <li>
+          workspace: {{ inv.workspace.name }}
+          <a href="{{ url_for('workspace_bp.respond_invitation', invitation_id=inv.invitation_id) }}" class="btn btn-sm btn-success">Accept</a>
+          <a href="{{ url_for('workspace_bp.respond_invitation', invitation_id=inv.invitation_id) }}" class="btn btn-sm btn-danger">Decline</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+
+
+      <!-- If user has no workspace, show hero CTA. Otherwise, show panels. -->
+      {% if my_workspaces|length == 0 %}
+        <div class="card shadow-sm mb-4 border-0">
+          <div class="card-body text-center p-5">
+            <h2 class="mb-3">Welcome to {{ app_name }}, {{ user.first_name or user.email }}!</h2>
+            <p class="text-muted mb-4">
+              It looks like you haven't joined or created any workspace yet.
+              Workspaces let you collaborate with your team members, schedule workshops, and manage workshops.
+              Get started by creating your first workspace or joining an existing one!
+            </p>
+            <a href="{{ url_for('workspace_bp.create_workspace') }}" class="btn btn-lg btn-primary me-2">
+              <i class="bi bi-building-add"></i> Create Workspace
+            </a>
+            <a href="{{ url_for('workspace_bp.list_workspaces') }}" class="btn btn-lg btn-outline-secondary">
+              <i class="bi bi-people-fill"></i> Browse Workspaces
+            </a>
+          </div>
+        </div>
+      {% else %}
+
+        <!-- My workspaces Panel -->
+        <div class="card mb-4 shadow-sm">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">My workspaces</span>
+            <!-- NEW BUTTON HERE -->
+            <a href="{{ url_for('workspace_bp.create_workspace') }}" class="btn btn-primary btn-sm">
+              <i class="bi bi-plus-circle"></i> New Workspace
+            </a>
+          </div>
+          <div class="card-body">
+            <ul class="list-group">
+              {% for workspace in my_workspaces %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong>{{ workspace.name }}</strong>
+                    {% if workspace.is_private %}
+                      <span class="badge bg-secondary ms-2">Private</span>
+                    {% else %}
+                      <span class="badge bg-info text-dark ms-2">Public</span>
+                    {% endif %}
+                  </div>
+                  <a href="{{ url_for('workspace_bp.view_workspace', workspace_id=workspace.workspace_id) }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-eye"></i> View
+                  </a>
+                </li>
+              {% else %}
+                <li class="list-group-item">No workspaces found.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+
+        <!-- Workshop Panel -->
+        <div class="card mb-4 shadow-sm">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">My workshops</span>
+            <a href="{{ url_for('workshop_bp.create_workshop_general') }}" class="btn btn-primary btn-sm">
+              <i class="bi bi-calendar-plus"></i> Create workshop
+            </a>
+          </div>
+          <div class="card-body">
+            <ul class="list-group">
+              {% for workshop in workshops %}
+                <li class="list-group-item d-flex justify-content-between align-items-center workshop-item" data-workshop-id="{{ workshop.workshop_id }}">
+                  <div>
+                    <h6 class="mb-1">{{ workshop.title }}</h6>
+                    <small class="text-muted">{{ workshop.date_time.strftime('%Y-%m-%d %H:%M') }}</small>
+                  </div>
+                  <a href="{{ url_for('workshop_bp.view_workshop', workshop_id=workshop.id) }}" class="btn btn-outline-secondary btn-sm">Details</a>
+                </li>
+              {% else %}
+                <li class="list-group-item">No workshops scheduled.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+
+       
+
+        <!-- Members Panel -->
+        <!--div class="card mb-4 shadow-sm">
+          <div class="card-header fw-bold">
+            Members
+          </div>
+          <div class="card-body">
+            <ul class="list-group">
+              {% for member in members %}
+                <li class="list-group-item d-flex align-items-center">
+                  <img
+                    src="{{ url_for('static', filename=member.profile_pic_url or 'default-profile.png') }}"
+                    alt="{{ member.first_name }} {{ member.last_name }}"
+                    class="rounded-circle me-3"
+                    style="width: 40px; height: 40px; object-fit: cover;"
+                  />
+                  <span>{{ member.first_name }} {{ member.last_name }}</span>
+                  <a href="{{ url_for('profile_bp.member_profile', user_id=member.user_id) }}" class="btn btn-outline-secondary btn-sm ms-auto">Profile</a>
+                </li>
+              {% else %}
+                <li class="list-group-item">No members found.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div -->
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+function editTask(taskId) {
+  // Example: open a modal or redirect to a task editing page
+  alert("Editing task " + taskId);
+}
+</script>
+{% endblock %}

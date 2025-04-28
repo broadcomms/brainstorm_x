@@ -252,6 +252,10 @@ class BrainstormIdea(db.Model):
     task = db.relationship("BrainstormTask", back_populates="ideas")
     participant = db.relationship("WorkshopParticipant")
     
+    # Add to BrainstormIdea
+    cluster_id = db.Column(db.Integer, db.ForeignKey("idea_clusters.id"), nullable=True)
+    cluster = db.relationship("IdeaCluster", back_populates="ideas")
+    
 
 # ------------------- IdeaCluster Model --------------------------
 class IdeaCluster(db.Model):
@@ -263,11 +267,9 @@ class IdeaCluster(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=False)
     name = db.Column(db.String(255), nullable=False)
 
-    ideas = db.relationship("BrainstormIdea", back_populates="cluster", lazy='dynamic')
+    ideas = db.relationship("BrainstormIdea", back_populates="cluster")
 
-# Add to BrainstormIdea
-cluster_id = db.Column(db.Integer, db.ForeignKey("idea_clusters.id"), nullable=True)
-cluster = db.relationship("IdeaCluster", back_populates="ideas")
+
 
 
 # -------------- IdeaVote Model ----------------------------------

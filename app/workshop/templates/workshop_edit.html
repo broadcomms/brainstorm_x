@@ -1,0 +1,29 @@
+<!-- app/workshop/templates/edit_workshop.html -->
+{% extends "base.html" %}
+{% block title %}Edit Workshop: {{ workshop.title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Edit Workshop: {{ workshop.title }}</h2>
+    <p>Workspace: <a href="{{ url_for('workspace_bp.view_workspace', workspace_id=workshop.workspace.workspace_id) }}">{{ workshop.workspace.name }}</a></p>
+    <hr>
+    <form action="{{ url_for('workshop_bp.edit_workshop', workshop_id=workshop.id) }}" method="POST">
+
+        {% include '_workshop_form.html' %}
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="{{ url_for('workshop_bp.view_workshop', workshop_id=workshop.id) }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include base scripts if any #}
+<script>
+  // Initialize Flatpickr for datetime input
+  flatpickr(".flatpickr-datetime", {
+    enableTime: true,
+    dateFormat: "Y-m-d H:i", // Match the format expected by Python strptime
+    time_24hr: true
+  });
+</script>
+{% endblock %}

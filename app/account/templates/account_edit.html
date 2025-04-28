@@ -1,0 +1,52 @@
+<!-- templates/edit_account.html -->
+{% extends "base.html" %}
+{% block title %}Edit Account{% endblock %}
+{% block content %}
+<div class="container mt-5">
+  <div class="card shadow-sm">
+    <div class="card-header">
+      Edit Account Information
+    </div>
+    <div class="card-body">
+      <form method="POST">
+        <!--div class="mb-3">
+          <label for="username" class="form-label">Username</label>
+          <input type="text" class="form-control" id="username" name="username"
+                 value="{{ user.username }}" required>
+        </div-->
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" name="email"
+                 value="{{ user.email }}" required>
+        </div>
+        <div class="mb-3">
+          <label for="first_name" class="form-label">First Name</label>
+          <input type="text" class="form-control" id="first_name" name="first_name"
+                 value="{{ user.first_name }}">
+        </div>
+        <div class="mb-3">
+          <label for="last_name" class="form-label">Last Name</label>
+          <input type="text" class="form-control" id="last_name" name="last_name"
+                 value="{{ user.last_name }}">
+        </div>
+        <div class="mb-3">
+          <label for="job_title" class="form-label">Job Title</label>
+          <input type="text" class="form-control" id="job_title" name="job_title"
+                 value="{{ user.job_title }}">
+        </div>
+        <div class="mb-3">
+          <label for="organization" class="form-label">Organization</label>
+          <input type="text" class="form-control" id="organization" name="organization"
+                 value="{{ user.organization }}">
+        </div>
+        <div class="mb-3">
+          <label for="phone_number" class="form-label">Phone Number</label>
+          <input type="text" class="form-control" id="phone_number" name="phone_number"
+                 value="{{ user.phone_number }}">
+        </div>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
