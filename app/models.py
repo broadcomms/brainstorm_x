@@ -34,7 +34,7 @@ class User(db.Model, UserMixin):
     reset_token_expires = db.Column(db.DateTime, nullable=True)
 
     # Profile Picture
-    profile_pic_url = db.Column(db.String(255), default="instance/default/profile_picture.png")
+    profile_pic_url = db.Column(db.String(255), default="images/default-profile.png")
 
     # Timestamps
     created_timestamp = db.Column(db.DateTime, default=datetime.utcnow)

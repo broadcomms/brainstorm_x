@@ -314,7 +314,7 @@ def reset_password(token):
         flash("Your password has been updated. Please log in.", "success")
         return redirect(url_for("auth_bp.login"))
 
-    return render_template("reset_password.html")
+    return render_template("auth_reset.html")
 
 ########################################################
 # Example Role-Restricted Endpoint
@@ -329,3 +329,37 @@ def admin_only():
         flash("You do not have permission to access this resource.", "danger")
         return redirect(url_for("dashboard_bp.dashboard"))
     return "Welcome, Admin! (This is a secure admin-only endpoint.)"
+
+##############################################################################
+# Change Password
+##############################################################################
+@auth_bp.route("/change_password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    """
+    Verifies the current password and updates it to a new one.
+    """
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "").strip()
+        new_password = request.form.get("new_password", "").strip()
+        confirm_password = request.form.get("confirm_password", "").strip()
+        
+        if not current_password or not new_password or not confirm_password:
+            flash("All fields are required.", "danger")
+            return redirect(url_for("profile_bp.change_password"))
+        
+        if not bcrypt.verify(current_password, current_user.password):
+            flash("Current password is incorrect.", "danger")
+            return redirect(url_for("profile_bp.change_password"))
+        
+        if new_password != confirm_password:
+            flash("New password and confirmation do not match.", "danger")
+            return redirect(url_for("profile_bp.change_password"))
+        
+        current_user.password = bcrypt.hash(new_password)
+        db.session.commit()
+        
+        flash("Password changed successfully!", "success")
+        return redirect(url_for("account_bp.account"))
+    
+    return render_template("auth_change.html")
