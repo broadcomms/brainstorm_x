@@ -33,25 +33,20 @@ from sqlalchemy import or_
 from app.auth.routes import send_email  # TODO: Move send_email from auth to a extension module
 from datetime import datetime  # Import datetime
 
+# Import generate agenda text
+from app.service.routes.agenda import generate_agenda_text
+# Import aggregate_pre_workshop_data from the new utils file ---
+from app.utils.data_aggregation import aggregate_pre_workshop_data
+# Import extract_json_block
+from app.service.routes.agent import extract_json_block 
+
 from app.service.routes.agent import (
-    generate_rules_text,
     generate_icebreaker_text,
     generate_tip_text,
-    # generate_agenda_text, # REMOVED TO
     generate_introduction_text,
-    # extract_json_block, # This helper is also used in agent.py, maybe move it too?
     generate_next_task_text,
     generate_action_plan_text
-) # Import generation functions
-
-# Import the function specifically from agenda.py
-from app.service.routes.agenda import generate_agenda_text
-# --- Import aggregate_pre_workshop_data from the new utils file ---
-from app.utils.data_aggregation import aggregate_pre_workshop_data
-# --- Import extract_json_block from agent.py or move it to utils ---
-# Assuming extract_json_block is still needed here and is defined in agent.py
-from app.service.routes.agent import extract_json_block # Keep this import if it's defined there
-
+) 
 
 from concurrent.futures import ThreadPoolExecutor
 # Create a thread pool for asynchronous generation

@@ -13,32 +13,31 @@ import markdown # If you plan to return HTML directly later
 # 1.b Generate workshop agenda (New Function)
 def generate_agenda_text(workshop_id):
     """Generates a suggested workshop agenda using the LLM."""
-    # --- Ensure aggregate_pre_workshop_data is accessible ---
-    # This function is likely still defined in agent.py, so the import above handles it.
+    # --- Get pre workshop data (aggregated) ---
     pre_workshop_data = aggregate_pre_workshop_data(workshop_id)
     if not pre_workshop_data:
-        # Consider logging this error as well
+        # TODO: Consider logging this error
         # current_app.logger.error(f"Failed to get pre-workshop data for {workshop_id}")
         return "Could not generate agenda: Workshop data unavailable."
 
     # Define the prompt template for generating an agenda
     agenda_prompt_template = """
-You are an expert workshop facilitator AI.
-Based *only* on the detailed workshop context provided below, create a structured, timed agenda proposal.
-The agenda should logically flow towards the workshop's objective and fit within the specified duration.
+                            You are an expert workshop facilitator AI.
+                            Based *only* on the detailed workshop context provided below, create a structured, timed agenda proposal.
+                            The agenda should logically flow towards the workshop's objective and fit within the specified duration.
 
-Workshop Context:
-{pre_workshop_data}
+                            Workshop Context:
+                            {pre_workshop_data}
 
-Instructions:
-- Analyze the Workshop Title, Objective, Duration, and Participant count/roles.
-- Create a bulleted or numbered list representing the agenda flow.
-- Include estimated timings for each major section (e.g., Introduction: 10 mins, Brainstorming Session 1: 30 mins, Wrap-up: 15 mins). Ensure total time roughly matches the workshop duration.
-- Keep descriptions concise.
-- Output *only* the agenda list itself, with no introductory sentence, explanation, confidence scores, or any other text before or after the list. Use Markdown for formatting (e.g., bullet points).
+                            Instructions:
+                            - Analyze the Workshop Title, Objective, Duration, and Participant count/roles.
+                            - Create a bulleted or numbered list representing the agenda flow.
+                            - Include estimated timings for each major section (e.g., Introduction: 10 mins, Brainstorming Session 1: 30 mins, Wrap-up: 15 mins). Ensure total time roughly matches the workshop duration.
+                            - Keep descriptions concise.
+                            - Output *only* the agenda list itself, with no introductory sentence, explanation, confidence scores, or any other text before or after the list. Use Markdown for formatting (e.g., bullet points).
 
-Generate the agenda proposal now:
-"""
+                            Generate the agenda proposal now:
+                            """
 
     # Initialize the Watsonx LLM (adjust parameters if needed for longer/structured output)
     watsonx_llm_agenda = WatsonxLLM(
