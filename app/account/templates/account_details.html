@@ -11,7 +11,7 @@
         <div class="card-body text-center">
 
           <img
-            src="{{ url_for('static', filename=user.profile_pic_url) or url_for('static', filename='default-profile.png') }}"
+            src=""
             alt="Profile Picture"
             class="img-fluid rounded-circle mb-3"
             style="width: 100px; height: 100px; object-fit: cover;"
@@ -20,9 +20,9 @@
           <p class="text-muted mb-3">{{ user.email }}</p>
 
           <div class="d-grid gap-2">
-            <a href="{{ url_for('profile_bp.update_photo') }}" class="btn btn-sm btn-outline-primary">Update Photo</a>
-            <a href="{{ url_for('profile_bp.edit_account') }}" class="btn btn-sm btn-outline-secondary">Edit Account</a>
-            <a href="{{ url_for('profile_bp.change_password') }}" class="btn btn-sm btn-outline-warning">Change Password</a>
+            <a href="" class="btn btn-sm btn-outline-primary">Update Photo</a>
+            <a href="" class="btn btn-sm btn-outline-secondary">Edit Account</a>
+            <a href="" class="btn btn-sm btn-outline-warning">Change Password</a>
             <a href="{{ url_for('auth_bp.logout') }}" class="btn btn-sm btn-outline-danger">Logout</a>
           </div>
         </div>

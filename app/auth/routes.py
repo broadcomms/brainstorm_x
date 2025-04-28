@@ -92,7 +92,6 @@ def register():
             first_name=first_name,
             last_name=last_name,
             job_title=job_title,
-            workspace=workspace,
             phone_number=phone_number,
             email_verified=False,
             verification_token=verification_token,

@@ -20,3 +20,12 @@ class Config:
     WATSONX_MODEL_ID_1 = os.environ.get("WATSONX_MODEL_ID_1", "ibm/granite-3-3-8b-instruct")
     WATSONX_MODEL_ID_2 = os.environ.get("WATSONX_MODEL_ID_2", "ibm/granite-3-3-8b-instruct")
     WATSONX_MODEL_ID_3 = os.environ.get("WATSONX_MODEL_ID_3", "ibm/granite-3-3-8b-instruct")
+    
+        # Flask-Mail config
+    MAIL_SERVER = os.environ.get("MAIL_SERVER", "broadcomms.net")
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", "465"))
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'False').lower() == 'true'
+    MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'True').lower() == 'true'
+    MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "no-reply@broadcomms.net")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "5i-8v@S4y$Y?")
+    MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "no-reply@broadcomms.net")

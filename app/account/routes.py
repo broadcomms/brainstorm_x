@@ -72,7 +72,7 @@ def account():
     APP_NAME = current_app.config.get("APP_NAME", "BrainStormX")
 
     return render_template(
-        "account.html",
+        "account_details.html",
         user=current_user,
         app_name=APP_NAME,
         my_workspaces=my_workspaces,
