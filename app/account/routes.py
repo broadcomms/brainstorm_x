@@ -9,6 +9,7 @@ from app.models import User, Workspace, WorkspaceMember, Invitation, Workshop
 from app import db 
 from sqlalchemy import or_, desc
 from app.config import Config
+from werkzeug.utils import secure_filename
 
 account_bp = Blueprint("account_bp", __name__, template_folder="templates")
 
@@ -148,3 +149,47 @@ def edit_account():
         return redirect(url_for("account_bp.account"))
     
     return render_template("account_edit.html", user=user_to_edit)
+
+
+
+##############################################################################
+# Update Profile Photo
+##############################################################################
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@account_bp.route("/update_photo", methods=["GET", "POST"])
+@login_required
+def update_photo():
+    """
+    Updates the current user's profile photo.
+    The file is saved under static/uploads/profile_pics.
+    The relative URL is stored in the user's profile_pic_url column.
+    """
+    if request.method == "POST":
+        file = request.files.get("profile_pic")
+        if not file:
+            flash("No file provided.", "danger")
+            return redirect(url_for("profile_bp.update_photo"))
+        if not allowed_file(file.filename):
+            flash("Invalid file type. Only PNG/JPG/JPEG/GIF are allowed.", "danger")
+            return redirect(url_for("profile_bp.update_photo"))
+        
+        # Secure filename and save file
+        filename = secure_filename(file.filename)
+        upload_folder = os.path.join(current_app.static_folder, "uploads", "profile_pics")
+        os.makedirs(upload_folder, exist_ok=True)
+        unique_filename = f"{current_user.user_id}_{filename}"
+        save_path = os.path.join(upload_folder, unique_filename)
+        file.save(save_path)
+        
+        # Store the relative URL (without '/static/')
+        relative_url = f"uploads/profile_pics/{unique_filename}"
+        current_user.profile_pic_url = relative_url
+        db.session.commit()
+        
+        flash("Profile photo updated successfully!", "success")
+        return redirect(url_for("account_bp.account"))
+    
+    return render_template("update_photo.html")

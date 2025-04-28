@@ -78,7 +78,7 @@ def create_workspace():
         if not name:
             flash("Workspace name is required.", "danger")
             # --- Return render_template instead of redirect to preserve form data (optional but good UX) ---
-            return render_template("create_workspace.html", name=name, description=description, is_private=is_private)
+            return render_template("workspace_create.html", name=name, description=description, is_private=is_private)
 
         # Check if name already in use
         existing = Workspace.query.filter_by(name=name).first()
@@ -88,7 +88,7 @@ def create_workspace():
                 "danger",
             )
             # --- Return render_template instead of redirect ---
-            return render_template("create_workspace.html", name=name, description=description, is_private=is_private)
+            return render_template("workspace_create.html", name=name, description=description, is_private=is_private)
 
 
         # Create the workspace object
@@ -126,10 +126,10 @@ def create_workspace():
             current_app.logger.error(f"Error creating workspace: {e}")
             flash("An error occurred while creating the workspace.", "danger")
             # It's good practice to pass the attempted values back to the form
-            return render_template("create_workspace.html", name=name, description=description, is_private=is_private)
+            return render_template("workspace_create.html", name=name, description=description, is_private=is_private)
 
     # GET request
-    return render_template("create_workspace.html")
+    return render_template("workspace_create.html")
 
 
 
@@ -163,7 +163,7 @@ def edit_workspace(workspace_id):
         if not new_name:
             flash("Workspace name cannot be empty.", "danger")
             # Re-render form with error and existing data
-            return render_template("edit_workspace.html", workspace=workspace)
+            return render_template("workspace_edit.html", workspace=workspace)
 
         # Check if new name conflicts with another workspace (excluding itself)
         existing = Workspace.query.filter(
@@ -176,7 +176,7 @@ def edit_workspace(workspace_id):
             workspace.name = new_name # Temporarily set for template rendering
             workspace.description = new_description
             workspace.is_private = new_is_private
-            return render_template("edit_workspace.html", workspace=workspace)
+            return render_template("workspace_edit.html", workspace=workspace)
 
         # Update workspace details
         workspace.name = new_name
@@ -193,10 +193,10 @@ def edit_workspace(workspace_id):
             current_app.logger.error(f"Error updating workspace {workspace_id}: {e}")
             flash("An error occurred while updating the workspace.", "danger")
             # Re-render form with error and existing data
-            return render_template("edit_workspace.html", workspace=workspace)
+            return render_template("workspace_edit.html", workspace=workspace)
 
     # --- GET Request: Render the edit form with current data ---
-    return render_template("edit_workspace.html", workspace=workspace)
+    return render_template("workspace_edit.html", workspace=workspace)
 
 
 
@@ -274,7 +274,7 @@ def view_workspace(workspace_id):
 
     # --- Render Template with Prepared Data ---
     return render_template( 
-        "view_workspace.html",
+        "workspace_details.html",
         workspace=workspace,
         documents=workspace_documents,
         my_membership=my_membership,
@@ -611,3 +611,36 @@ def change_role(workspace_id, member_id):
         flash("An error occurred while changing the role.", "danger")
 
     return redirect(url_for("workspace_bp.view_workspace", workspace_id=workspace_id))
+
+##############################################################################
+# View Member Profile
+##############################################################################
+
+# Helper to build absolute path for images TODO: Consider
+def path_exists_in_static(relative_path: str) -> bool:
+    """
+    Given a relative path (e.g., "uploads/profile_pics/3_user.png"),
+    build the absolute path using current_app.static_folder and check if the file exists.
+    """
+    if not relative_path:
+        return False
+    # Ensure the path doesn't start with a slash if it's meant to be relative to static_folder
+    relative_path = relative_path.lstrip('/')
+    full_path = os.path.join(current_app.static_folder, relative_path)
+    return os.path.isfile(full_path)
+
+@workspace_bp.route("/members/<int:user_id>")
+@login_required
+def member_profile(user_id):
+    """
+    Renders a specific user's profile.
+    If the member's profile_pic_url is invalid, reset it to the default.
+    """
+    member = User.query.get_or_404(user_id)
+    # Use a default image path if the specific one doesn't exist or is empty
+    if not member.profile_pic_url or not path_exists_in_static(member.profile_pic_url):
+        member.profile_pic_url = "images/default-profile.png" # Assuming default is in static/images
+
+    # Pass the user object as 'user' to the template
+    return render_template("workspace_member.html", member=member) # Changed 'member=member' to 'user=member'
+

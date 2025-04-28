@@ -148,7 +148,7 @@
                     style="width: 40px; height: 40px; object-fit: cover;"
                   />
                   <span>{{ member.first_name }} {{ member.last_name }}</span>
-                  <a href="{{ url_for('profile_bp.member_profile', user_id=member.user_id) }}" class="btn btn-outline-secondary btn-sm ms-auto">Profile</a>
+                  <a href="{{ url_for('workspace_bp.member_profile', user_id=member.user_id) }}" class="btn btn-outline-secondary btn-sm ms-auto">Profile</a>
                 </li>
               {% else %}
                 <li class="list-group-item">No members found.</li>

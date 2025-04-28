@@ -1,0 +1,210 @@
+<!-- app/templates/member_profile.html -->
+{% extends "main_template.html" %}
+{% block title %}{{ member.first_name }} {{ member.last_name }}'s Profile{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+
+  <!-- Profile Header Card -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body d-flex flex-column flex-md-row align-items-center">
+      
+      <!-- Profile Picture -->
+      <div class="text-center mb-3 mb-md-0 me-md-4">
+        <img
+          src="{{ url_for('static', filename=member.profile_pic_url) or url_for('static', filename='default-profile.png') }}"
+          alt="{{ member.username }}"
+          class="rounded-circle border"
+          style="width: 150px; height: 150px; object-fit: cover;"
+        />
+      </div>
+      
+      <!-- Basic Info -->
+      <div class="flex-fill">
+        <h3 class="mb-1">
+          {{ member.first_name }} {{ member.last_name }}
+          {% if member.account_status %}
+            <span class="badge 
+              {% if member.account_status == 'Active' %}bg-success
+              {% elif member.account_status == 'Suspended' %}bg-danger
+              {% else %}bg-secondary{% endif %}
+            ">
+              {{ member.account_status }}
+            </span>
+          {% else %}
+            <!-- If no status in your DB, fallback to 'Active' or remove this section -->
+            <span class="badge bg-success">Active</span>
+          {% endif %}
+        </h3>
+        <!--p class="text-muted mb-2">@{{ member.username }}</p-->
+        <p class="mb-2">
+          <strong>Email:</strong> {{ member.email }}<br>
+          <strong>Role:</strong> {{ member.role or "User" }}<br>
+          <strong>Date Joined:</strong> 
+            {{ member.created_timestamp.strftime('%Y-%m-%d') if member.created_timestamp else "" }}
+        </p>
+        
+        <!-- Button to upload/change photo -->
+        {% if current_user.user_id == member.user_id %}
+          <!-- The user can update their own picture -->
+          <a href="{{ url_for('account_bp.update_photo') }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-camera"></i> Update Profile Picture
+          </a>
+        {% endif %}
+      </div>
+      
+    </div>
+  </div>
+
+  <!-- Main Profile Content -->
+  <div class="row">
+    
+    <!-- Left Column: Organization Details & Activity Summary -->
+    <div class="col-md-6 mb-4">
+      
+      <!-- Organization Details Card -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white fw-bold">Workspace Details</div>
+        <div class="card-body">
+          {% if member.workspace_memberships %}
+            <ul class="list-group">
+              {% for membership in member.workspace_memberships %}
+                <li class="list-group-item">
+                  <div class="d-flex justify-content-between">
+                    <div>
+                      <strong>{{ membership.workspace.name }}</strong>
+                      {% if membership.workspace.is_private %}
+                        <span class="badge bg-secondary ms-2">Private</span>
+                      {% else %}
+                        <span class="badge bg-info text-dark ms-2">Public</span>
+                      {% endif %}
+                      <br>
+                      <small>Role: {{ membership.role|capitalize }}</small>
+                      <small class="text-muted ms-2">Status: {{ membership.status|capitalize }}</small>
+                    </div>
+                    <!-- Example: button to leave or manage membership -->
+                    {% if current_user.user_id == member.user_id or current_user.role in ["admin","manager"] %}
+                      <form method="POST" action="#" class="ms-3">
+                        <!-- e.g. membership removal if you have that route -->
+                        <button class="btn btn-sm btn-outline-danger">Leave</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p>This user is not part of any workspace yet.</p>
+          {% endif %}
+          
+          <!-- Example button to request membership in a public org (if viewing your own profile) -->
+          {% if current_user.user_id == member.user_id %}
+            <a href="{{ url_for('workspace_bp.list_workspaces') }}" class="btn btn-sm btn-outline-primary mt-3">
+              Request Membership in a Public Workspace
+            </a>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Activity Summary Card -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">Activity Summary</div>
+        <div class="card-body">
+          <!-- Example: Meetings Attended -->
+          <h6>Workshops Attended</h6>
+          {% if member.attended_workshops %}
+            <ul class="list-group mb-3">
+              {% for meet in member.attended_workshops %}
+                <li class="list-group-item d-flex justify-content-between">
+                  <span>{{ meet.title }}</span>
+                  <small class="text-muted">{{ meet.date_time.strftime('%Y-%m-%d %H:%M') }}</small>
+                </li>
+              {% else %}
+                <li class="list-group-item">No attended workshops found.</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          
+          <!-- Meetings Created or Hosted -->
+          <h6>Workshops Created / Hosted</h6>
+          {% if member.hosted_workshops %}
+            <ul class="list-group mb-3">
+              {% for workshop in member.hosted_workshops %}
+                <li class="list-group-item d-flex justify-content-between">
+                  <span>{{ workshop.title }}</span>
+                  <small class="text-muted">{{ workshop.date_time.strftime('%Y-%m-%d %H:%M') }}</small>
+                </li>
+              {% else %}
+                <li class="list-group-item">No hosted workshops found.</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          
+          <!-- Invitations Sent (if Manager/Admin) -->
+          {% if member.role in ["admin", "manager"] %}
+            <h6>Invitations Sent</h6>
+            <ul class="list-group">
+              <!-- Example placeholder if you store invitation data -->
+              <li class="list-group-item">
+                <span class="text-muted">No data available</span>
+              </li>
+            </ul>
+          {% endif %}
+        </div>
+      </div>
+      
+    </div> <!-- /col-md-6 -->
+
+    <!-- Right Column: Privacy and Settings -->
+    <div class="col-md-6">
+      
+      <!-- Privacy & Settings Card -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white fw-bold">Privacy &amp; Settings</div>
+        <div class="card-body">
+          <!-- Profile Visibility Toggle -->
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="visibilityToggle" 
+                   {% if member.is_profile_public %}checked{% endif %}>
+            <label class="form-check-label" for="visibilityToggle">Profile Visibility (Public)</label>
+          </div>
+
+          <!-- Notification Settings -->
+          <h6 class="mt-4">Notifications</h6>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="emailNotifications" checked>
+            <label class="form-check-label" for="emailNotifications">Email Notifications</label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="inAppNotifications">
+            <label class="form-check-label" for="inAppNotifications">In-App Notifications</label>
+          </div>
+
+          <!-- Security Options -->
+          <h6 class="mt-4">Security Options</h6>
+          <div class="mb-3">
+            <p>Two-Factor Authentication (2FA)</p>
+            <button class="btn btn-sm btn-outline-secondary disabled">
+              Enable/Disable 2FA
+            </button>
+            <!-- Implement your real 2FA logic here -->
+          </div>
+
+          <!-- Buttons for user to manage or self-service -->
+          {% if current_user.user_id == member.user_id %}
+            <a href="{{ url_for('auth_bp.change_password') }}" class="btn btn-sm btn-outline-warning me-2">
+              Change Password
+            </a>
+            <a href="{{ url_for('account_bp.edit_account') }}" class="btn btn-sm btn-outline-secondary me-2">
+              Edit Profile Info
+            </a>
+          {% endif %}
+        </div>
+      </div>
+      
+    </div> <!-- /col-md-6 -->
+    
+  </div> <!-- /row -->
+  
+</div> <!-- /container -->
+{% endblock %}
