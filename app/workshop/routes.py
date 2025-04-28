@@ -160,7 +160,7 @@ def get_raw_action_plan(workshop_id):
          # Or check workspace membership if that's the rule
         return jsonify({"success": False, "message": "Permission denied"}), 403
 
-    raw_json = workshop.generated_action_plan or '[]'
+    raw_json = workshop.task_sequence or '[]'
     return jsonify({"success": True, "raw_json": raw_json})
 
 
@@ -1011,29 +1011,29 @@ def workshop_lobby(workshop_id):
              current_app.logger.warning(f"Failed to generate rules for workshop {workshop_id}")
 
     # Icebreaker
-    if workshop.generated_icebreaker:
-        ai_icebreaker_raw = workshop.generated_icebreaker
+    if workshop.icebreaker:
+        ai_icebreaker_raw = workshop.icebreaker
         current_app.logger.debug(f"Loaded icebreaker from DB for workshop {workshop_id}")
     else:
         current_app.logger.debug(f"Generating icebreaker for workshop {workshop_id}")
         ai_icebreaker_raw = generate_icebreaker_text(workshop_id) # Generate if missing
         if ai_icebreaker_raw and not ai_icebreaker_raw.startswith("Could not generate"):
-            workshop.generated_icebreaker = ai_icebreaker_raw
+            workshop.icebreaker = ai_icebreaker_raw
             save_needed = True
         else:
             ai_icebreaker_raw = "Could not generate an icebreaker." # Fallback
             current_app.logger.warning(f"Failed to generate icebreaker for workshop {workshop_id}")
 
     # Tip (load or generate)
-    if workshop.generated_tip:
-        ai_tip_raw = workshop.generated_tip
+    if workshop.tip:
+        ai_tip_raw = workshop.tip
         current_app.logger.debug(f"Loaded tip from DB for workshop {workshop_id}")
     else:
         current_app.logger.debug(f"Generating tip for workshop {workshop_id}")
         ai_tip_raw = generate_tip_text(workshop_id) # Generate if missing
         # Adjust check based on actual error/fallback message from generate_tip_text
         if ai_tip_raw and not ai_tip_raw.startswith("No pre‑workshop data found") and not ai_tip_raw.startswith("Could not generate"):
-            workshop.generated_tip = ai_tip_raw
+            workshop.tip = ai_tip_raw
             save_needed = True
         else:
             ai_tip_raw = "Could not generate a tip." # Fallback
@@ -1148,7 +1148,7 @@ def regenerate_icebreaker(workshop_id):
     try:
         new_icebreaker_raw = generate_icebreaker_text(workshop_id)
         if not new_icebreaker_raw.startswith("Could not generate"):
-            workshop.generated_icebreaker = new_icebreaker_raw
+            workshop.icebreaker = new_icebreaker_raw
             db.session.commit()
             new_icebreaker_html = markdown.markdown(new_icebreaker_raw)
             socketio.emit('ai_content_update', {
@@ -1171,7 +1171,7 @@ def regenerate_tip(workshop_id):
     try:
         new_tip_raw = generate_tip_text(workshop_id)
         if not new_tip_raw.startswith("No pre‑workshop data found"):
-            workshop.generated_tip = new_tip_raw
+            workshop.tip = new_tip_raw
             db.session.commit()
             new_tip_html = markdown.markdown(new_tip_raw)
             socketio.emit('ai_content_update', {
@@ -1218,7 +1218,7 @@ def edit_icebreaker(workshop_id):
     if edited_content is None:
         return jsonify({"success": False, "message": "No content provided."}), 400
     try:
-        workshop.generated_icebreaker = edited_content
+        workshop.icebreaker = edited_content
         db.session.commit()
         edited_content_html = markdown.markdown(edited_content)
         socketio.emit('ai_content_update', {
@@ -1240,7 +1240,7 @@ def edit_tip(workshop_id):
     if edited_content is None:
         return jsonify({"success": False, "message": "No content provided."}), 400
     try:
-        workshop.generated_tip = edited_content
+        workshop.tip = edited_content
         db.session.commit()
         edited_content_html = markdown.markdown(edited_content)
         socketio.emit('ai_content_update', {
@@ -1371,7 +1371,7 @@ def regenerate_action_plan(workshop_id):
         # Attempt to parse to ensure it's valid JSON before saving (generator should return cleaned JSON now)
         try:
             json.loads(new_plan_raw) # Validate the string from the generator
-            workshop.generated_action_plan = new_plan_raw # Save the validated JSON string
+            workshop.task_sequence = new_plan_raw # Save the validated JSON string
         except json.JSONDecodeError:
              current_app.logger.error(f"Regenerated action plan is invalid JSON for workshop {workshop_id}. Raw: {new_plan_raw[:100]}...")
              # Return error if the generator somehow still produced invalid JSON
@@ -1381,7 +1381,7 @@ def regenerate_action_plan(workshop_id):
         current_app.logger.info(f"Successfully regenerated and saved action plan for workshop {workshop_id}")
 
         # --- Render the HTML list from the new JSON string ---
-        new_plan_html = render_action_plan_html(workshop.generated_action_plan)
+        new_plan_html = render_action_plan_html(workshop.task_sequence)
 
         # Emit update via WebSocket
         socketio.emit('ai_content_update', {
@@ -1418,11 +1418,11 @@ def edit_action_plan(workshop_id):
     # Validate if the received string is valid JSON before saving
     try:
         json.loads(edited_json_string) # Try parsing
-        workshop.generated_action_plan = edited_json_string # Save the validated JSON string
+        workshop.task_sequence = edited_json_string # Save the validated JSON string
         db.session.commit()
 
         # --- Render the HTML list from the *saved* JSON string ---
-        edited_content_html = render_action_plan_html(workshop.generated_action_plan)
+        edited_content_html = render_action_plan_html(workshop.task_sequence)
 
         # Emit update via WebSocket (optional)
         socketio.emit('ai_content_update', {
@@ -1874,10 +1874,10 @@ def next_task(workshop_id):
     next_action_plan_item = None
     next_index = 0
 
-    if workshop.generated_action_plan:
+    if workshop.task_sequence:
         try:
             # Clean potential markdown/fencing if LLM added it
-            cleaned_json_string = extract_json_block(workshop.generated_action_plan)
+            cleaned_json_string = extract_json_block(workshop.task_sequence)
             action_plan_items = json.loads(cleaned_json_string)
             if not isinstance(action_plan_items, list):
                 action_plan_items = [] # Ensure it's a list
