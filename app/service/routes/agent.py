@@ -95,24 +95,24 @@ def aggregate_pre_workshop_data(workshop_id):
 
     # --- ADDED: Include Generated AI Content ---
     data_string += "**Generated Content (if available):**\n"
-    if workshop.generated_rules:
-        indented_rules = workshop.generated_rules.replace('\n', '\n    ')
+    if workshop.rules:
+        indented_rules = workshop.rules.replace('\n', '\n    ')
         data_string += f"*   **Rules/Guidelines:**\n    {indented_rules}\n"
     else:
         data_string += "*   **Rules/Guidelines:** Not generated yet.\n"
 
-    if workshop.generated_icebreaker:
-        data_string += f"*   **Icebreaker:** {workshop.generated_icebreaker}\n"
+    if workshop.icebreaker:
+        data_string += f"*   **Icebreaker:** {workshop.icebreaker}\n"
     else:
         data_string += "*   **Icebreaker:** Not generated yet.\n"
 
-    if workshop.generated_tip:
-        data_string += f"*   **Preparation Tip:** {workshop.generated_tip}\n"
+    if workshop.tip:
+        data_string += f"*   **Preparation Tip:** {workshop.tip}\n"
     else:
         data_string += "*   **Preparation Tip:** Not generated yet.\n"
         # --- ADDED: Include Generated Action Plan ---
-    if workshop.generated_action_plan:
-        indented_plan = workshop.generated_action_plan.replace('\n', '\n    ')
+    if workshop.task_sequence:
+        indented_plan = workshop.task_sequence.replace('\n', '\n    ')
         #print(f"[Agent] Workshop action plan: {indented_plan}") # DEBUG CODE
         # data_string += f"*   **Action Plan:**\n    {indented_plan}\n"
         data = json.loads(indented_plan)

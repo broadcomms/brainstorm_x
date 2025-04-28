@@ -56,7 +56,7 @@ def load_or_schedule_ai_content(workshop, attr, generator_func, event_type):
     schedules asynchronous generation and returns a placeholder.
 
     workshop: Workshop instance
-    attr: string name of the Workshop field, e.g. 'agenda' or 'generated_rules'
+    attr: string name of the Workshop field, e.g. 'agenda' or 'rules'
     generator_func: function(workshop_id) -> raw text
     event_type: string used for socket event type, e.g. 'agenda', 'rules'
     """
@@ -996,15 +996,15 @@ def workshop_lobby(workshop_id):
 
 
     # Rules
-    if workshop.generated_rules:
-        ai_rules_raw = workshop.generated_rules
+    if workshop.rules:
+        ai_rules_raw = workshop.rules
         current_app.logger.debug(f"Loaded rules from DB for workshop {workshop_id}")
     else:
         current_app.logger.debug(f"Generating rules for workshop {workshop_id}")
         ai_rules_raw = generate_rules_text(workshop_id) # Generate if missing
         # Basic check for generation success (adjust if your function returns specific errors)
         if ai_rules_raw and not ai_rules_raw.startswith("Could not generate"):
-            workshop.generated_rules = ai_rules_raw
+            workshop.rules = ai_rules_raw
             save_needed = True
         else:
              ai_rules_raw = "Could not generate rules at this time." # Provide fallback text
@@ -1124,7 +1124,7 @@ def regenerate_rules(workshop_id):
     try:
         new_rules_raw = generate_rules_text(workshop_id)
         if not new_rules_raw.startswith("Could not generate"):
-            workshop.generated_rules = new_rules_raw
+            workshop.rules = new_rules_raw
             db.session.commit()
             new_rules_html = markdown.markdown(new_rules_raw)
             # Emit WebSocket event (optional but good for real-time updates)
@@ -1196,7 +1196,7 @@ def edit_rules(workshop_id):
     if edited_content is None:
         return jsonify({"success": False, "message": "No content provided."}), 400
     try:
-        workshop.generated_rules = edited_content # Store raw markdown/text
+        workshop.rules = edited_content # Store raw markdown/text
         db.session.commit()
         edited_content_html = markdown.markdown(edited_content)
         socketio.emit('ai_content_update', {

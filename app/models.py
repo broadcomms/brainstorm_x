@@ -21,7 +21,7 @@ class User(db.Model, UserMixin):
     last_name = db.Column(db.String(100), nullable=True)
     job_title = db.Column(db.String(150), nullable=True)
     phone_number = db.Column(db.String(50), nullable=True)
-
+    organization = db.Column(db.String(150), nullable=True)
     # Role Based Access Control (RBAC)
     role = db.Column(db.String(50), default="user")  # 'admin', 'manager', 'user'
 
