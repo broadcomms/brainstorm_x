@@ -1,5 +1,5 @@
-<!-- app/workshop/templates/view_workshop.html -->
-{% extends "base.html" %}
+<!-- app/workshop/templates/workshop_details.html -->
+{% extends "main_template.html" %}
 {% block title %}Workshop: {{ workshop.title }}{% endblock %}
 
 {% block content %}
@@ -155,7 +155,7 @@
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
                         <img src="{{ url_for('static', filename=p.user.profile_pic_url or 'default-profile.png') }}" alt="pic" class="rounded-circle me-2" style="width: 30px; height: 30px; object-fit: cover;">
-                        <a href="{{ url_for('profile_bp.member_profile', user_id=p.user_id) }}">{{ p.user.first_name or '' }} {{ p.user.last_name or '' }}</a>
+                        <a href="{{ url_for('workspace_bp.member_profile', user_id=p.user_id) }}">{{ p.user.first_name or '' }} {{ p.user.last_name or '' }}</a>
                         <small class="text-muted">({{ p.user.email }})</small>
                         {% if p.role == 'organizer' %}
                             <span class="badge bg-primary ms-2">Organizer</span>

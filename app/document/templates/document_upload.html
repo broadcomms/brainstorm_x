@@ -1,0 +1,67 @@
+{% extends "main_template.html" %}
+{% block title %}Document Upload{% endblock %}
+
+{% block content %}
+
+<div class="card shadow-sm">
+    <div class="card-header">
+        Upload Document
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('document_bp.upload_document') }}" method="post" enctype="multipart/form-data">
+            <!-- Workspace Selection -->
+            <div class="mb-3">
+                <label for="workspace_id" class="form-label">Select Workspace *</label>
+                <select name="workspace_id" id="workspace_id" class="form-select" required>
+                    <option value="" disabled selected>-- Choose a Workspace --</option>
+                    {% for ws in workspaces %}
+                        <option value="{{ ws.workspace_id }}">{{ ws.name }}</option>
+                    {% else %}
+                        <option value="" disabled>You are not a member of any workspace.</option>
+                    {% endfor %}
+                </select>
+                {% if not workspaces %}
+                 <div class="form-text text-danger">You must be a member of a workspace to upload documents.</div>
+                {% endif %}
+            </div>
+
+            <!-- File Input -->
+            <div class="mb-3">
+                <label for="file" class="form-label">Select File *</label>
+                <input type="file" name="file" id="file" class="form-control" required>
+            </div>
+
+            <!-- Document Title -->
+            <div class="mb-3">
+                <label for="title" class="form-label">Document Title (optional)</label>
+                <input type="text" name="title" id="title" placeholder="Leave blank to use filename" class="form-control">
+            </div>
+
+            <!-- Description with TinyMCE -->
+            <div class="mb-3">
+                <label for="description" class="form-label">Description (optional)</label>
+                <textarea name="description" id="description" class="form-control" rows="5"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary" {% if not workspaces %}disabled{% endif %}>
+                <i class="bi bi-upload"></i> Upload Document
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- TinyMCE Initialization -->
+<!-- Replace with your actual TinyMCE API key if you have one -->
+<script src="https://cdn.tiny.cloud/1/mhrhnr24v1a6tbmutlvgeb0kf546ip1y8tcx6rox4mhty74j/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+  tinymce.init({
+    selector: 'textarea#description', // Target the textarea by ID
+    plugins: 'advlist autolink lists link image charmap print preview anchor searchreplace visualblocks code fullscreen insertdatetime media table paste code help wordcount',
+    toolbar: 'undo redo | formatselect | bold italic backcolor | \
+              alignleft aligncenter alignright alignjustify | \
+              bullist numlist outdent indent | removeformat | help',
+    height: 300 // Adjust height as needed
+  });
+</script>
+
+{% endblock %}

@@ -1,5 +1,5 @@
-<!-- app/workshop/templates/create_workshop.html -->
-{% extends "base.html" %}
+<!-- app/workshop/templates/workshop_create.html -->
+{% extends "main_template.html" %}
 {% block title %}Create Workshop{% endblock %}
 
 {% block content %}
@@ -17,7 +17,7 @@
     <hr>
 
         
-        {% include '_workshop_form.html' %}
+        {% include 'workshop_form.html' %}
 
     
         <button type="submit" class="btn btn-primary">Create Workshop</button>
@@ -31,14 +31,114 @@
         {% endif %}
     </form>
 </div>
+
+<script>
+    // DEBUG SCRIPT for Workshop Create Auto-fill # TODO: Remove this when ready
+    document.addEventListener('DOMContentLoaded', function () {
+
+        console.log('Workshop auto-fill script loaded.');
+
+        // Function to toggle auto-fill
+        window.toggleWorkshopAutoFill = function (enable) {
+            localStorage.setItem('autoFillWorkshopCreate', enable); // Use a specific key
+            console.log('Workshop create auto-fill ' + (enable ? 'enabled' : 'disabled'));
+            applyWorkshopAutoFill(); // Call applyAutoFill after toggling
+        };
+
+        function applyWorkshopAutoFill() {
+            const autoFillEnabled = localStorage.getItem('autoFillWorkshopCreate') === 'true';
+            if (!autoFillEnabled) return;
+
+            console.log('Applying workshop auto-fill...');
+
+            // --- Target Workshop Form Fields ---
+
+            // 1. Workspace selector (if present)
+            const wsSelect = document.querySelector('select[name="workspace_id"]');
+            if (wsSelect) {
+                // Select the first *actual* workspace option (skip the disabled placeholder)
+                const firstOption = wsSelect.querySelector('option:not([disabled])');
+                if (firstOption) {
+                    wsSelect.value = firstOption.value;
+                    console.log('Auto-filled workspace:', wsSelect.value);
+                } else {
+                    console.log('No workspace options found to auto-fill.');
+                }
+            } else {
+                 console.log('Workspace selector not found (expected if creating within a specific workspace).');
+            }
+
+            // 2. Title
+            const titleInput = document.querySelector('input[name="title"]');
+            if (titleInput) {
+                titleInput.value = 'Auto-Generated Test Workshop';
+                console.log('Auto-filled title.');
+            }
+
+            // 3. Objective
+            const objectiveTextarea = document.querySelector('textarea[name="objective"]');
+            if (objectiveTextarea) {
+                objectiveTextarea.value = 'To test the auto-fill functionality for workshop creation.';
+                console.log('Auto-filled objective.');
+            }
+
+            // 4. Date & Time (Needs careful handling with Flatpickr)
+            const dateTimeInput = document.querySelector('input[name="date_time"].flatpickr-datetime');
+            if (dateTimeInput && dateTimeInput._flatpickr) { // Check if flatpickr is initialized
+                 // Set a future date/time for testing
+                const now = new Date();
+                const futureDate = new Date(now.setDate(now.getDate() + 7)); // 7 days from now
+                const year = futureDate.getFullYear();
+                const month = (futureDate.getMonth() + 1).toString().padStart(2, '0'); // JS months are 0-indexed
+                const day = futureDate.getDate().toString().padStart(2, '0');
+                const hours = '14'; // Example: 2 PM
+                const minutes = '30';
+                const formattedDateTime = `${year}-${month}-${day} ${hours}:${minutes}`;
+
+                dateTimeInput._flatpickr.setDate(formattedDateTime, true); // Set date and trigger change event
+                console.log('Auto-filled date/time:', formattedDateTime);
+            } else if (dateTimeInput) {
+                 console.log('Flatpickr instance not found on date/time input yet.');
+                 // Simple value setting might work but Flatpickr might override it later
+                 // dateTimeInput.value = 'YYYY-MM-DD HH:MM'; // Set a placeholder if needed
+            }
+
+
+            // 5. Duration
+            const durationInput = document.querySelector('input[name="duration"]');
+            if (durationInput) {
+                durationInput.value = '90';
+                console.log('Auto-filled duration.');
+            }
+
+            // 6. Agenda
+            const agendaTextarea = document.querySelector('textarea[name="agenda"]');
+            if (agendaTextarea) {
+                agendaTextarea.value =
+`*   Item 1: Introduction
+*   Item 2: Core Content
+*   Item 3: Q&A`;
+                console.log('Auto-filled agenda.');
+            }
+        }
+
+        // Apply auto-fill on initial load
+        applyWorkshopAutoFill();
+
+        console.log('Workshop auto-fill script ready. Use toggleWorkshopAutoFill(true) to enable or toggleWorkshopAutoFill(false) to disable.');
+
+        // --- Default for development ---
+        // Set the default state (e.g., enable it by default during development)
+        if (localStorage.getItem('autoFillWorkshopCreate') === null) {
+             // Set to true only if it hasn't been set before
+             toggleWorkshopAutoFill(true);
+        } else {
+            // Apply based on the currently stored setting
+            applyWorkshopAutoFill();
+        }
+
+    });
+</script>
+
 {% endblock %}
 
-{% block scripts %}
-{{ super() }} {# Include base scripts if any #}
-
-
-
-
-
-
-{% endblock %}

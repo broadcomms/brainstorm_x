@@ -189,7 +189,7 @@ def create_workshop_general():
         if not workspace_id or not title or not date_time_str:
             flash("Workspace, Workshop title, and date/time are required.", "danger")
             return render_template(
-                "create_workshop.html",
+                "workshop_create.html",
                 workspaces=user_workspaces,
                 show_workspace_select=True,  # Flag for template
                 form_data=request.form,  # Repopulate form
@@ -199,7 +199,7 @@ def create_workshop_general():
         if not any(ws.workspace_id == workspace_id for ws in user_workspaces):
             flash("Invalid workspace selected.", "danger")
             return render_template(
-                "create_workshop.html",
+                "workshop_create.html",
                 workspaces=user_workspaces,
                 show_workspace_select=True,
                 form_data=request.form,
@@ -210,7 +210,7 @@ def create_workshop_general():
         except ValueError:
             flash("Invalid date/time format. Please use YYYY-MM-DD HH:MM.", "danger")
             return render_template(
-                "create_workshop.html",
+                "workshop_create.html",
                 workspaces=user_workspaces,
                 show_workspace_select=True,
                 form_data=request.form,
@@ -255,7 +255,7 @@ def create_workshop_general():
             flash("An unexpected error occurred while creating the workshop.", "danger")
 
         return render_template(
-            "create_workshop.html",
+            "workshop_create.html",
             workspaces=user_workspaces,
             show_workspace_select=True,
             form_data=request.form,
@@ -263,7 +263,7 @@ def create_workshop_general():
 
     # GET request
     return render_template(
-        "create_workshop.html",
+        "workshop_create.html",
         workspaces=user_workspaces,
         show_workspace_select=True,  # Flag for template
     )
@@ -303,7 +303,7 @@ def create_workshop_specific(workspace_id):
         if not title or not date_time_str:
             flash("Workshop title and date/time are required.", "danger")
             return render_template(
-                "create_workshop.html",
+                "workshop_create.html",
                 workspace=workspace,  # Pass specific workspace
                 show_workspace_select=False,  # Don't show select
                 form_data=request.form,
@@ -314,7 +314,7 @@ def create_workshop_specific(workspace_id):
         except ValueError:
             flash("Invalid date/time format. Please use YYYY-MM-DD HH:MM.", "danger")
             return render_template(
-                "create_workshop.html",
+                "workshop_create.html",
                 workspace=workspace,
                 show_workspace_select=False,
                 form_data=request.form,
@@ -359,7 +359,7 @@ def create_workshop_specific(workspace_id):
             flash("An unexpected error occurred while creating the workshop.", "danger")
 
         return render_template(
-            "create_workshop.html",
+            "workshop_create.html",
             workspace=workspace,
             show_workspace_select=False,
             form_data=request.form,
@@ -367,7 +367,7 @@ def create_workshop_specific(workspace_id):
 
     # GET request
     return render_template(
-        "create_workshop.html",
+        "workshop_create.html",
         workspace=workspace,  # Pass specific workspace
         show_workspace_select=False,  # Don't show select
     )
@@ -452,14 +452,14 @@ def view_workshop(workshop_id):
     linked_docs = workshop.linked_documents.all()
     
     # --- Render Action Plan HTML ---
-    action_plan_html = render_action_plan_html(workshop.generated_action_plan)
+    action_plan_html = render_action_plan_html(workshop.task_sequence)
     # --- Store raw JSON for JS ---
-    raw_action_plan_json = workshop.generated_action_plan or '[]' # Default to empty JSON array string
+    raw_action_plan_json = workshop.task_sequence or '[]' # Default to empty JSON array string
 
     
     
     return render_template(
-        "view_workshop.html",
+        "workshop_details.html",
         workshop=workshop,
         participants=participants,
         potential_participants=potential_participants,
@@ -497,7 +497,7 @@ def edit_workshop(workshop_id):
             flash("Workshop title and date/time are required.", "danger")
             # Pass back form data for repopulation
             return render_template(
-                "edit_workshop.html",
+                "workshop_edit.html",
                 workshop=workshop,
                 form_data=request.form,  # Pass form data
             )
@@ -507,7 +507,7 @@ def edit_workshop(workshop_id):
         except ValueError:
             flash("Invalid date/time format. Please use YYYY-MM-DD HH:MM.", "danger")
             return render_template(
-                "edit_workshop.html",
+                "workshop_edit.html",
                 workshop=workshop,
                 form_data=request.form,  # Pass form data
             )
@@ -523,7 +523,7 @@ def edit_workshop(workshop_id):
         if status not in allowed_statuses:
             flash(f"Invalid status provided.", "danger")
             return render_template(
-                "edit_workshop.html",
+                "workshop_edit.html",
                 workshop=workshop,
                 form_data=request.form,  # Pass form data
             )
@@ -549,7 +549,7 @@ def edit_workshop(workshop_id):
             flash("An error occurred while updating the workshop.", "danger")
             # Pass back form data on error too
             return render_template(
-                "edit_workshop.html", workshop=workshop, form_data=request.form
+                "workshop_edit.html", workshop=workshop, form_data=request.form
             )
 
     # GET request - format datetime for the input field
@@ -558,7 +558,7 @@ def edit_workshop(workshop_id):
         workshop.date_time.strftime("%Y-%m-%d %H:%M") if workshop.date_time else ""
     )
     return render_template(
-        "edit_workshop.html", workshop=workshop, form_data=None
+        "workshop_edit.html", workshop=workshop, form_data=None
     )  # Pass None for form_data on GET
 
 

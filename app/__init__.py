@@ -1,6 +1,7 @@
 # app/__init__.py
 import os
 import sqlite3
+import markdown
 from flask import Flask
 from flask_cors import CORS
 from .config import Config
@@ -54,6 +55,14 @@ def create_app(config_filename=None):
         # Return the user object from the user ID stored in the session
         return User.query.get(int(user_id))
     # --------------------------------
+    
+    # --- Register Jinja Filter for Markdown ---
+    @app.template_filter('markdown')
+    def markdown_filter(text):
+        """Converts Markdown text to HTML."""
+        # You can add extensions here if needed, e.g., 'fenced_code', 'tables'
+        return markdown.markdown(text, extensions=['fenced_code'])
+    # -----------------------------------------
 
     # Register App Blueprints
     app.register_blueprint(main_bp)

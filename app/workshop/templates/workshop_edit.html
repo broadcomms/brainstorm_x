@@ -1,5 +1,5 @@
-<!-- app/workshop/templates/edit_workshop.html -->
-{% extends "base.html" %}
+<!-- app/workshop/templates/workshop_edit.html -->
+{% extends "main_template.html" %}
 {% block title %}Edit Workshop: {{ workshop.title }}{% endblock %}
 
 {% block content %}
@@ -9,7 +9,7 @@
     <hr>
     <form action="{{ url_for('workshop_bp.edit_workshop', workshop_id=workshop.id) }}" method="POST">
 
-        {% include '_workshop_form.html' %}
+        {% include 'workshop_form.html' %}
         <button type="submit" class="btn btn-primary">Save Changes</button>
         <a href="{{ url_for('workshop_bp.view_workshop', workshop_id=workshop.id) }}" class="btn btn-secondary">Cancel</a>
     </form>
