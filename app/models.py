@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from flask_login import UserMixin
 from .extensions import db
-import secrets # Added for participants token
+import secrets  # Added for participants token and invitations
 
 
 # ---------------- User Model ----------------
@@ -12,7 +12,6 @@ class User(db.Model, UserMixin):
 
     # Basic Identity
     username = db.Column(db.String(100), nullable=True)  # Used for display name
-    
     email = db.Column(db.String(255), unique=True, nullable=False)  # For login
     password = db.Column(db.Text, nullable=False)
 
@@ -43,10 +42,18 @@ class User(db.Model, UserMixin):
     )
 
     # Relationships
-    workspace_memberships = db.relationship("WorkspaceMember", back_populates="user", lazy='dynamic')
-    uploaded_documents = db.relationship("Document", back_populates="uploader", lazy='dynamic')
-    created_workshops = db.relationship("Workshop", back_populates="creator", foreign_keys="Workshop.created_by_id", lazy='dynamic')
-    workshop_participations = db.relationship("WorkshopParticipant", back_populates="user", lazy='dynamic')
+    workspace_memberships = db.relationship(
+        "WorkspaceMember", back_populates="user", lazy='dynamic'
+    )
+    uploaded_documents = db.relationship(
+        "Document", back_populates="uploader", lazy='dynamic'
+    )
+    created_workshops = db.relationship(
+        "Workshop", back_populates="creator", foreign_keys="Workshop.created_by_id", lazy='dynamic'
+    )
+    workshop_participations = db.relationship(
+        "WorkshopParticipant", back_populates="user", lazy='dynamic'
+    )
 
     def get_id(self):
         return str(self.user_id)
@@ -67,10 +74,18 @@ class Workspace(db.Model):
     logo_url = db.Column(db.String(255), default="")
 
     # Relationships
-    owner = db.relationship("User", backref=db.backref("owned_workspaces", lazy=True))
-    members = db.relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan", lazy='selectin')
-    documents = db.relationship("Document", back_populates="workspace", cascade="all, delete-orphan", lazy='dynamic')
-    workshops = db.relationship("Workshop", back_populates="workspace", cascade="all, delete-orphan", lazy='dynamic')
+    owner = db.relationship(
+        "User", backref=db.backref("owned_workspaces", lazy=True)
+    )
+    members = db.relationship(
+        "WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan", lazy='selectin'
+    )
+    documents = db.relationship(
+        "Document", back_populates="workspace", cascade="all, delete-orphan", lazy='dynamic'
+    )
+    workshops = db.relationship(
+        "Workshop", back_populates="workspace", cascade="all, delete-orphan", lazy='dynamic'
+    )
 
 
 # ------------- Workspace Member Model ----------------
@@ -80,7 +95,7 @@ class WorkspaceMember(db.Model):
     workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.workspace_id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     role = db.Column(db.String(50), default="member")  # RBAC: 'admin', 'member', 'viewer'
-    status = db.Column(db.String(50), default="active")  # STATUS: 'active', 'invited','declined','inactive', 'requested'
+    status = db.Column(db.String(50), default="active")  # 'active', 'invited', 'declined', 'inactive', 'requested'
     joined_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -88,7 +103,9 @@ class WorkspaceMember(db.Model):
     workspace = db.relationship("Workspace", back_populates="members")
 
     # Unique constraint
-    __table_args__ = (db.UniqueConstraint('workspace_id', 'user_id', name='_workspace_user_uc'),)
+    __table_args__ = (
+        db.UniqueConstraint('workspace_id', 'user_id', name='_workspace_user_uc'),
+    )
 
 
 # ---------------- Member Invitation Model ----------------
@@ -102,20 +119,24 @@ class Invitation(db.Model):
     sent_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     expiration_timestamp = db.Column(db.DateTime)
     custom_message = db.Column(db.Text, nullable=True)
-    status = db.Column(db.String(50), default='pending', nullable=False) #STATUS: 'pending', 'accepted', 'declined', 'expired'
+    status = db.Column(db.String(50), default='pending', nullable=False) 
 
     # Relationships
     workspace = db.relationship("Workspace", backref=db.backref("invitations", lazy=True))
-    inviter   = db.relationship("User",      backref=db.backref("sent_invitations", lazy=True))
+    inviter = db.relationship("User", backref=db.backref("sent_invitations", lazy=True))
 
-    # Helper method to generate token and set expiration ---
+   
     def generate_token(self, expires_in_days=7):
         self.token = secrets.token_urlsafe(32)
         self.expiration_timestamp = datetime.utcnow() + timedelta(days=expires_in_days)
 
-    # Helper method to check if token is valid ---
+ 
     def is_valid(self):
-        return self.status == 'pending' and self.expiration_timestamp and self.expiration_timestamp > datetime.utcnow()
+        return (
+            self.status == 'pending'
+            and self.expiration_timestamp
+            and self.expiration_timestamp > datetime.utcnow()
+        )
 
 
 # ---------------- Document Model ----------------
@@ -124,17 +145,19 @@ class Document(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.workspace_id"), nullable=False)
     title = db.Column(db.String(255), nullable=False)
-    file_name = db.Column(db.String(255), nullable=False) # Original uploaded filename
-    file_path = db.Column(db.String(255), nullable=False) # Path relative to instance/uploads
+    file_name = db.Column(db.String(255), nullable=False)  
+    file_path = db.Column(db.String(255), nullable=False)  
     uploaded_by_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
-    file_size = db.Column(db.Integer, nullable=True) # Store file size in bytes
-    description = db.Column(db.Text, nullable=True) # <-- ADDED THIS FIELD
+    file_size = db.Column(db.Integer, nullable=True)  
+    description = db.Column(db.Text, nullable=True)  
 
     # Relationships
     uploader = db.relationship("User", back_populates="uploaded_documents")
     workspace = db.relationship("Workspace", back_populates="documents")
-    workshop_links = db.relationship("WorkshopDocument", back_populates="document", cascade="all, delete-orphan", lazy='dynamic')
+    workshop_links = db.relationship(
+        "WorkshopDocument", back_populates="document", cascade="all, delete-orphan", lazy='dynamic'
+    )
 
 
 # ---------------- Workshop Model ----------------
@@ -145,27 +168,34 @@ class Workshop(db.Model):
     objective = db.Column(db.Text, nullable=True)
     workspace_id = db.Column(db.Integer, db.ForeignKey("workspaces.workspace_id"), nullable=False)
     date_time = db.Column(db.DateTime, nullable=False)
-    duration = db.Column(db.Integer, nullable=True) # Duration in minutes
-    status = db.Column(db.String(50), default="scheduled") #STATUS: 'scheduled', 'inprogress', 'paused', 'completed', 'cancelled'
+    duration = db.Column(db.Integer, nullable=True)  # Duration in minutes
+    status = db.Column(db.String(50), default="scheduled")  # 'scheduled', 'inprogress', 'paused', 'completed', 'cancelled'
     agenda = db.Column(db.Text, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    rules = db.Column(db.Text, nullable=True) # JSON or text representation of generated rules
-    icebreaker = db.Column(db.Text, nullable=True) # JSON or text representation of generated icebreaker
-    tip = db.Column(db.Text, nullable=True) # JSON or text representation of generated tips
-    
-    task_sequence = db.Column(db.Text, nullable=True) 
+    rules = db.Column(db.Text, nullable=True)      # JSON/text of generated rules
+    icebreaker = db.Column(db.Text, nullable=True)  # JSON/text of generated icebreakers
+    tip = db.Column(db.Text, nullable=True)         # JSON/text of generated tips
+    task_sequence = db.Column(db.Text, nullable=True)
     current_task_index = db.Column(db.Integer, nullable=True, default=None)
-    
+
     # Relationships
     workspace = db.relationship("Workspace", back_populates="workshops")
-    creator = db.relationship("User", back_populates="created_workshops", foreign_keys=[created_by_id])
-    participants = db.relationship("WorkshopParticipant", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic')
-    linked_documents = db.relationship("WorkshopDocument", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic')
+    creator = db.relationship(
+        "User", back_populates="created_workshops", foreign_keys=[created_by_id]
+    )
+    participants = db.relationship(
+        "WorkshopParticipant", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic'
+    )
+    linked_documents = db.relationship(
+        "WorkshopDocument", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic'
+    )
+    tasks = db.relationship(
+        "BrainstormTask", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic'
+    ) 
 
-    # Helper property to get the organizer
+  
     @property
     def organizer(self):
         organizer_participant = self.participants.filter_by(role='organizer').first()
@@ -178,25 +208,29 @@ class WorkshopParticipant(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     workshop_id = db.Column(db.Integer, db.ForeignKey("workshops.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
-    role = db.Column(db.String(50), default="participant") # organizer, participant
-    status = db.Column(db.String(50), default="invited") # invited, accepted, declined
-    invitation_token = db.Column(db.String(64), unique=True, nullable=True) # Token for accept/decline link
-    token_expires = db.Column(db.DateTime, nullable=True) # Expiration for the token
-    joined_timestamp = db.Column(db.DateTime, nullable=True) # When they accepted
+    role = db.Column(db.String(50), default="participant")  # 'organizer', 'participant'
+    status = db.Column(db.String(50), default="invited")    # 'invited', 'accepted', 'declined'
+    invitation_token = db.Column(db.String(64), unique=True, nullable=True)
+    token_expires = db.Column(db.DateTime, nullable=True)
+    joined_timestamp = db.Column(db.DateTime, nullable=True)
 
     # Relationships
     workshop = db.relationship("Workshop", back_populates="participants")
     user = db.relationship("User", back_populates="workshop_participations")
 
     # Unique constraint
-    __table_args__ = (db.UniqueConstraint('workshop_id', 'user_id', name='_workshop_user_uc'),)
+    __table_args__ = (
+        db.UniqueConstraint('workshop_id', 'user_id', name='_workshop_user_uc'),
+    )
 
-    # Helper function to generate and validate tokens.
     def generate_token(self):
         self.invitation_token = secrets.token_urlsafe(32)
-        self.token_expires = datetime.utcnow() + timedelta(days=7) # Example: 7-day expiry
+        self.token_expires = datetime.utcnow() + timedelta(days=7)
+
     def is_token_valid(self):
-        return self.invitation_token and self.token_expires and self.token_expires > datetime.utcnow()
+        return (
+            self.invitation_token and self.token_expires and self.token_expires > datetime.utcnow()
+        )
 
 
 # ---------------- Workshop Document Link Model ----------------
@@ -212,64 +246,63 @@ class WorkshopDocument(db.Model):
     document = db.relationship("Document", back_populates="workshop_links")
 
     # Unique constraint
-    __table_args__ = (db.UniqueConstraint('workshop_id', 'document_id', name='_workshop_document_uc'),)
-    
-    
+    __table_args__ = (
+        db.UniqueConstraint('workshop_id', 'document_id', name='_workshop_document_uc'),
+    )
+
+
 # ---------------- BrainstormTask Model ---------------------------
 class BrainstormTask(db.Model):
     __tablename__ = "brainstorm_tasks"
-    
-    # Task details
     id = db.Column(db.Integer, primary_key=True)
     workshop_id = db.Column(db.Integer, db.ForeignKey("workshops.id"), nullable=False)
-    title = db.Column(db.String(255), nullable=False)            # e.g. "Introduction"
-    prompt = db.Column(db.Text, nullable=True)                   # The LLM’s generated text/instructions/question
-    
-    #Timer
-    duration = db.Column(db.Integer, nullable=False)             # The task duration in seconds
-    status = db.Column(db.String(50), default="pending")         # STATUS: 'pending', 'running','completed'
+    title = db.Column(db.String(255), nullable=False)            
+    prompt = db.Column(db.Text, nullable=True)                  
+    duration = db.Column(db.Integer, nullable=False)         
+    status = db.Column(db.String(50), default="pending")       
     started_at = db.Column(db.DateTime, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
-    
-    # Relationship
-    ideas = db.relationship("BrainstormIdea", back_populates="task",
-                            cascade="all, delete-orphan", lazy="dynamic")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    workshop = db.relationship("Workshop", back_populates="tasks") 
+    ideas = db.relationship("BrainstormIdea", back_populates="task", cascade="all, delete-orphan", lazy='dynamic')
+    logs = db.relationship("ActivityLog", back_populates="task", cascade="all, delete-orphan", lazy='dynamic')  
 
 
 # ---------------- BrainstormIdea Model ---------------------------
 class BrainstormIdea(db.Model):
     __tablename__ = "brainstorm_ideas"
-    
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=False)
     participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    votes = db.relationship("IdeaVote", back_populates="idea", cascade="all, delete-orphan", lazy='dynamic')
+    feasibility_report = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    feasibility_report = db.Column(db.Text, nullable=True) # Stores the generated feasibility report content
-    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
     # Relationships
     task = db.relationship("BrainstormTask", back_populates="ideas")
     participant = db.relationship("WorkshopParticipant")
-    
-    # Add to BrainstormIdea
+    votes = db.relationship("IdeaVote", back_populates="idea", cascade="all, delete-orphan", lazy='dynamic')
     cluster_id = db.Column(db.Integer, db.ForeignKey("idea_clusters.id"), nullable=True)
     cluster = db.relationship("IdeaCluster", back_populates="ideas")
-    
+    logs = db.relationship("ActivityLog", back_populates="idea", cascade="all, delete-orphan", lazy='dynamic') 
+
 
 # ------------------- IdeaCluster Model --------------------------
 class IdeaCluster(db.Model):
-    """
-        This allow grouping ideas into clusters for voting and prioritization
-    """
     __tablename__ = "idea_clusters"
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=False)
     name = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    ideas = db.relationship("BrainstormIdea", back_populates="cluster")
-
-
+    # Relationships
+    ideas = db.relationship("BrainstormIdea", back_populates="cluster", lazy='dynamic')
 
 
 # -------------- IdeaVote Model ----------------------------------
@@ -278,22 +311,32 @@ class IdeaVote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     idea_id = db.Column(db.Integer, db.ForeignKey("brainstorm_ideas.id"), nullable=False)
     participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=False)
-    votes = db.Column(db.Integer, default=1)  # Vote limits (default=1)
+    votes = db.Column(db.Integer, default=1)  # Vote count or weight
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    __table_args__ = (db.UniqueConstraint('idea_id', 'participant_id', name='_idea_participant_uc'),)
+    __table_args__ = (
+        db.UniqueConstraint('idea_id', 'participant_id', name='_idea_participant_uc'),
+    )
 
     # Relationships
     idea = db.relationship("BrainstormIdea", back_populates="votes")
     participant = db.relationship("WorkshopParticipant")
+    logs = db.relationship("ActivityLog", back_populates="vote", cascade="all, delete-orphan", lazy='dynamic')  # Track vote events
 
 
-# ---------------- ActivityLog ------------------------------------
-    """
-        This supports analytics, moderation and nudging logic
-        like idea count, inactivity trigger
-    """
+# ---------------- ActivityLog Model -----------------------------
 class ActivityLog(db.Model):
+    __tablename__ = "activity_logs"
     id = db.Column(db.Integer, primary_key=True)
-    participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"))
-    action = db.Column(db.String(100))  # e.g., "idea_submitted", "vote_cast", "chat_message"
+    participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=True)
+    idea_id = db.Column(db.Integer, db.ForeignKey("brainstorm_ideas.id"), nullable=True)
+    vote_id = db.Column(db.Integer, db.ForeignKey("idea_votes.id"), nullable=True)
+    action = db.Column(db.String(100), nullable=False) 
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    participant = db.relationship("WorkshopParticipant", back_populates="logs")
+    task        = db.relationship("BrainstormTask", back_populates="logs")
+    idea        = db.relationship("BrainstormIdea", back_populates="logs")
+    vote        = db.relationship("IdeaVote", back_populates="logs")
