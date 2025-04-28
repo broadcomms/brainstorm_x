@@ -1,4 +1,4 @@
-# app/service/routes/agenda.py
+# app/service/routes/rules.py
 
 from flask import jsonify
 from flask_login import login_required

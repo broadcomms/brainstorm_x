@@ -41,8 +41,6 @@ from app.utils.data_aggregation import aggregate_pre_workshop_data
 from app.service.routes.agent import extract_json_block 
 
 from app.service.routes.agent import (
-    generate_icebreaker_text,
-    generate_tip_text,
     generate_introduction_text,
     generate_next_task_text,
     generate_action_plan_text
