@@ -78,31 +78,11 @@
                 {% endif %}
 
 
-                {# --- Agenda Section --- #}
-                <dt class="col-sm-3">Agenda</dt>
-                <dd class="col-sm-9">
-                    {# Add ID here #}
-                    <div id="agenda-content-display" class="agenda-content border rounded p-2 bg-light mb-2">
-                        {% if workshop.agenda %}
-                            {{ workshop.agenda | markdown | safe }} {# Render Markdown #}
-                        {% else %}
-                            <p class="text-muted mb-0">No agenda provided.</p>
-                        {% endif %}
-                    </div>
-                    {# Add controls for organizer #}
-                    {% if user_is_organizer %}
-                    <div class="mt-1 text-end"> {# Use text-end for alignment #}
-                      <button class="btn btn-sm btn-outline-primary me-1 regenerate-btn" data-type="agenda" title="Regenerate Agenda">
-                        <i class="bi bi-arrow-clockwise"></i> <span class="d-none d-md-inline">Regenerate</span>
-                      </button>
-                      {# Link to the main edit page for simplicity in this view #}
-                      <a href="{{ url_for('workshop_bp.edit_workshop', workshop_id=workshop.id) }}" class="btn btn-sm btn-outline-secondary" title="Edit Agenda">
-                        <i class="bi bi-pencil-square"></i> <span class="d-none d-md-inline">Edit</span>
-                      </a>
-                    </div>
-                    {% endif %}
-                </dd>
-                {# --- End Agenda Section --- #}
+                {# --- Agenda Service --- #}
+                {% include 'service_agenda.html' %}
+                {# --- End Agenda Service --- #}
+                
+
                 {# --- Action Plan Section --- #}
                 <dt class="col-sm-3">Action Plan</dt>
                 <dd class="col-sm-9">

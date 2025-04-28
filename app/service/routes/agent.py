@@ -1,16 +1,13 @@
-# app/agent/routes.py
+# app/services/agent/routes.py
 # ----------------------------------------------------------
 
 
-
-
-
 # -----------------------------------------------------------
-#                   AI AGENT ROUTES
+#                   AGENT ROUTES
 # -----------------------------------------------------------
 #
 # # This file contains the routes for the ai agent module.
-# # Granite 3.3 Models
+# # Using Granite 3.3 Models
 # 
 #
 # #-----------------------------------------------------------
@@ -24,10 +21,15 @@ from flask_socketio import emit
 from app.extensions import db
 from app.models import Workshop, WorkshopParticipant, WorkshopDocument
 from app.config import Config
+
 # Import Watsonx LLM wrapper and prompt template
 from langchain_ibm import WatsonxLLM, ChatWatsonx
 from langchain_core.prompts import PromptTemplate
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor # TODO: ... overload if required later.
+
+# --- Import aggregate_pre_workshop_data from the new utils file ---
+from app.utils.data_aggregation import aggregate_pre_workshop_data
+
 agent_bp = Blueprint(   "agent_bp", 
                         __name__, 
                         template_folder="templates", 
@@ -35,153 +37,9 @@ agent_bp = Blueprint(   "agent_bp",
                         url_prefix="/agent"
                     )
 # #-----------------------------------------------------------
-
-
-
-
-
-
-
-
-### #---------------------------------------------------------
-### 1. PRE-WORKSHOP # #---------------------------------------
-# # This is phase where the agent prepares for the workshop.
-### #---------------------------------------------------------
-
-# #-----------------------------------------------------------
-# # 1.a Aggregate pre-workshop data
-def aggregate_pre_workshop_data(workshop_id):
-    """
-    Aggregates comprehensive data about a workshop, its participants,
-    workspace, and linked documents into a structured string format
-    suitable for an LLM prompt.
-    """
-    print(f"[Agent] Aggregating pre-workshop data for workshop_id: {workshop_id}")
-
-    # 1. Get the Workshop object
-    workshop = Workshop.query.options(
-        db.selectinload(Workshop.workspace), # Eager load workspace
-        db.selectinload(Workshop.creator),   # Eager load creator
-        db.selectinload(Workshop.participants).selectinload(WorkshopParticipant.user), # Eager load participants and their users
-        db.selectinload(Workshop.linked_documents).selectinload(WorkshopDocument.document) # Eager load linked docs and the actual documents
-    ).get(workshop_id)
-
-    if not workshop:
-        print(f"[Agent] Workshop with ID {workshop_id} not found.")
-        return None # Or raise an error, depending on desired behavior
-
-    # --- Start building the structured string ---
-    data_string = f"--- Workshop Context for ID: {workshop_id} ---\n\n"
-
-    # 2. Workshop Details
-    data_string += "**Workshop Details:**\n"
-    data_string += f"*   **Title:** {workshop.title}\n"
-    data_string += f"*   **Objective:** {workshop.objective or 'Not specified'}\n"
-    data_string += f"*   **Scheduled Date & Time:** {workshop.date_time.strftime('%Y-%m-%d %H:%M:%S UTC') if workshop.date_time else 'Not set'}\n"
-    data_string += f"*   **Duration:** {f'{workshop.duration} minutes' if workshop.duration else 'Not specified'}\n"
-    data_string += f"*   **Status:** {workshop.status}\n"
-    
-    agenda = workshop.agenda or 'No agenda provided'
-    indented = agenda.replace('\n', '\n    ')
-    data_string += "*   **Agenda:**\n    " + indented + "\n"
-    
-    creator_name = workshop.creator.first_name or workshop.creator.email
-    data_string += f"*   **Created By:** {creator_name} (ID: {workshop.created_by_id})\n"
-
-    # Find the organizer (using the helper property is cleaner if available and reliable)
-    organizer = workshop.organizer # Using the @property from Workshop model
-    organizer_name = organizer.first_name or organizer.email if organizer else "Not assigned"
-    data_string += f"*   **Organizer:** {organizer_name}\n\n"
-
-    # --- ADDED: Include Generated AI Content ---
-    data_string += "**Generated Content (if available):**\n"
-    if workshop.rules:
-        indented_rules = workshop.rules.replace('\n', '\n    ')
-        data_string += f"*   **Rules/Guidelines:**\n    {indented_rules}\n"
-    else:
-        data_string += "*   **Rules/Guidelines:** Not generated yet.\n"
-
-    if workshop.icebreaker:
-        data_string += f"*   **Icebreaker:** {workshop.icebreaker}\n"
-    else:
-        data_string += "*   **Icebreaker:** Not generated yet.\n"
-
-    if workshop.tip:
-        data_string += f"*   **Preparation Tip:** {workshop.tip}\n"
-    else:
-        data_string += "*   **Preparation Tip:** Not generated yet.\n"
-        # --- ADDED: Include Generated Action Plan ---
-    if workshop.task_sequence:
-        indented_plan = workshop.task_sequence.replace('\n', '\n    ')
-        #print(f"[Agent] Workshop action plan: {indented_plan}") # DEBUG CODE
-        # data_string += f"*   **Action Plan:**\n    {indented_plan}\n"
-        data = json.loads(indented_plan)
-        markdown_output = "# Workshop Phases\n\n"
-        for item in data:
-            markdown_output += f"## {item['phase']}\n{item['description']}\n\n"
-
-        print(markdown_output)
-    else:
-        data_string += "*   **Action Plan:** Not generated yet.\n"
-    data_string += "\n"
-    # --- END ADDED SECTION ---
-
-    # 3. Workspace Details
-    if workshop.workspace:
-        data_string += "**Workspace Details:**\n"
-        data_string += f"*   **Name:** {workshop.workspace.name}\n"
-        data_string += f"*   **Description:** {workshop.workspace.description or 'No description'}\n\n"
-    else:
-        data_string += "**Workspace Details:**\n*   Workshop is not associated with a workspace.\n\n"
-
-
-    # 4. Participant List
-    # Ensure participants are loaded correctly (selectinload should handle this)
-    participants = workshop.participants.all() if hasattr(workshop.participants, 'all') else list(workshop.participants)
-    data_string += f"**Participants ({len(participants)}):**\n"
-    if not participants:
-        data_string += "*   No participants found.\n"
-    else:
-        # Sort participants perhaps by role then name
-        participants.sort(key=lambda p: (p.role != 'organizer', (p.user.first_name or p.user.email).lower()))
-        for participant in participants:
-            user = participant.user
-            user_name = user.first_name or user.email
-            job_title = f" - Job: {user.job_title}" if user.job_title else ""
-            organization = f" - Org: {user.organization}" if user.organization else ""
-            data_string += f"*   {user_name} (ID: {user.user_id}) - Role: {participant.role}, Status: {participant.status}{job_title}{organization}\n"
-    data_string += "\n"
-
-
-    # 5. Linked Documents
-    # Ensure linked_docs are loaded correctly
-    linked_docs = workshop.linked_documents.all() if hasattr(workshop.linked_documents, 'all') else list(workshop.linked_documents)
-    data_string += f"**Linked Documents ({len(linked_docs)}):**\n"
-    if not linked_docs:
-        data_string += "*   No documents linked to this workshop.\n"
-    else:
-        for link in linked_docs:
-            doc = link.document
-            # Check if doc is loaded, handle potential None if relationship fails
-            if doc:
-                data_string += f"*   **{doc.title}** (ID: {doc.id}): {doc.description or 'No description'}\n"
-            else:
-                 data_string += f"*   Linked Document (ID: {link.document_id}) - Error loading details.\n" # Handle missing doc object
-        # Important Note for the LLM about document content:
-        data_string += "*   *(Note: Document content analysis is not performed. Information is based on titles and descriptions.)*\n"
-    data_string += "\n"
-
-    data_string += "--- End of Workshop Context ---\n"
-
-    print(f"[Agent] Successfully aggregated data for workshop {workshop_id}.") # DEBUG CODE
-    return data_string
-
-# #-----------------------------------------------------------
-# # 1.b Generate workshop agenda
-
-
-
-
+# Registers service routes in agent main
+# ------------------------------------------------------------
+from . import agenda
 
 
 
@@ -406,74 +264,6 @@ def generate_tips(workshop_id):
     return jsonify({"tip": tip}), 200
 
 
-
-# #-----------------------------------------------------------
-# # 1.b Generate workshop agenda (New Function)
-def generate_agenda_text(workshop_id):
-    """Generates a suggested workshop agenda using the LLM."""
-    pre_workshop_data = aggregate_pre_workshop_data(workshop_id)
-    if not pre_workshop_data:
-        return "Could not generate agenda: Workshop data unavailable."
-
-    # Define the prompt template for generating an agenda
-    agenda_prompt_template = """
-You are an expert workshop facilitator AI.
-Based *only* on the detailed workshop context provided below, create a structured, timed agenda proposal.
-The agenda should logically flow towards the workshop's objective and fit within the specified duration.
-
-Workshop Context:
-{pre_workshop_data}
-
-Instructions:
-- Analyze the Workshop Title, Objective, Duration, and Participant count/roles.
-- Create a bulleted or numbered list representing the agenda flow.
-- Include estimated timings for each major section (e.g., Introduction: 10 mins, Brainstorming Session 1: 30 mins, Wrap-up: 15 mins). Ensure total time roughly matches the workshop duration.
-- Keep descriptions concise.
-- Output *only* the agenda list itself, with no introductory sentence, explanation, confidence scores, or any other text before or after the list. Use Markdown for formatting (e.g., bullet points).
-
-Generate the agenda proposal now:
-"""
-
-    # Initialize the Watsonx LLM (adjust parameters if needed for longer/structured output)
-    watsonx_llm_agenda = WatsonxLLM(
-            model_id="ibm/granite-3-3-8b-instruct", # Or another suitable model
-            url=Config.WATSONX_URL,
-            project_id=Config.WATSONX_PROJECT_ID,
-            apikey=Config.WATSONX_API_KEY,
-            params={
-                "decoding_method": "sample", # Sample might be better for creative agenda structure
-                "max_new_tokens": 300,      # Increased for potentially longer agenda
-                "min_new_tokens": 50,
-                "temperature": 0.7,         # Moderate temperature
-                "top_k": 50,
-                "top_p": 0.9,
-                "repetition_penalty": 1.05
-            }
-        )
-
-    # Define llm prompt
-    agenda_prompt = PromptTemplate.from_template(agenda_prompt_template)
-
-    # Invoke llm chain
-    chain = agenda_prompt | watsonx_llm_agenda
-    raw_agenda = chain.invoke({"pre_workshop_data": pre_workshop_data})
-
-    print(f"[Agent] Workshop raw agenda for {workshop_id}: {raw_agenda}") # DEBUG CODE
-
-    # Basic cleanup (optional, depends on model consistency)
-    # raw_agenda = raw_agenda.strip()
-
-    return raw_agenda
-
-# Optional: API endpoint if needed
-@agent_bp.route("/generate_agenda/<int:workshop_id>", methods=["POST"])
-@login_required
-def generate_agenda(workshop_id):
-    """API endpoint to generate and return an agenda."""
-    agenda_text = generate_agenda_text(workshop_id)
-    if "Could not generate agenda" in agenda_text:
-        return jsonify({"error": agenda_text}), 404
-    return jsonify({"agenda": agenda_text}), 200
 
 
 
