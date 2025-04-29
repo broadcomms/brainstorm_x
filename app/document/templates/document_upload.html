@@ -64,4 +64,44 @@
   });
 </script>
 
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('Auto-fill script loaded for document upload.');
+  
+      // 1. Select Workspace by matching text "GDI Packaging"
+      const workspaceSelect = document.querySelector('#workspace_id');
+      if (workspaceSelect) {
+        const options = Array.from(workspaceSelect.options);
+        const targetOption = options.find(opt => opt.text.includes('GDI Packaging'));
+        if (targetOption) {
+          workspaceSelect.value = targetOption.value;
+        }
+      }
+  
+      // 2. Auto-fill Document Title
+      const titleInput = document.getElementById('title');
+      if (titleInput) {
+        titleInput.value = 'GDI Biodegradable Ideation';
+      }
+  
+  
+      // 4. File input cannot be set programmatically due to browser security
+      // Instead, show instructions to the user
+      const fileInput = document.getElementById('file');
+      if (fileInput) {
+        // Add a note next to the file input
+        const helpText = document.createElement('div');
+        helpText.className = 'form-text text-info';
+        helpText.innerHTML = 'Please select demo file: <strong>instance/documents/_sample_gdi_biodegradable_ideation.pdf</strong>';
+        fileInput.parentNode.appendChild(helpText);
+      }
+    });
+  </script>
+
+
+
+
+
+
 {% endblock %}

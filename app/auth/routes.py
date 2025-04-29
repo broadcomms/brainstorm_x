@@ -12,6 +12,7 @@ from sqlalchemy import or_
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 # Flask-Mail
 from flask_mail import Message
+from markupsafe import Markup
 
 # Import database & models
 from app.extensions import db, login_manager, mail
@@ -129,7 +130,7 @@ def register():
         """
         send_email(to_address=email, subject=f"Verify your {APP_NAME} account", body_html=email_body)
 
-        flash("Registration successful! Please check your email to verify your account.", "success")
+        flash(Markup('Registration successful! Please check your email to verify your account. <a target="_blank" href="https://ai.broadcomms.net/webmail">Check Email</a>'), "success")
         return redirect(url_for("auth_bp.login"))
 
     # Render registration form (optionally, pass along invitation_token and workspace_id to the template)

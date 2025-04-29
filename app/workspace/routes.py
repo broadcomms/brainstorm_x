@@ -411,7 +411,7 @@ def invite_member():
             subject=f"Invitation to Join {APP_NAME} Workspace",
             body_html=email_body,
         )
-        flash(f"Invitation email sent to {email}.", "success")
+        flash(f'Invitation email sent to {email}. <a target="_blank" href="https://ai.broadcomms.net/webmail">Check Email</a>', "success")
 
     return redirect(url_for("workspace_bp.view_workspace", workspace_id=workspace_id))
 
