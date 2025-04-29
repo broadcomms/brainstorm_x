@@ -23,21 +23,23 @@ def generate_agenda_text(workshop_id):
 
     # Define the prompt template for generating an agenda
     agenda_prompt_template = """
-                            You are an expert workshop facilitator AI.
-                            Based *only* on the detailed workshop context provided below, create a structured, timed agenda proposal.
-                            The agenda should logically flow towards the workshop's objective and fit within the specified duration.
+                            You are an AI assistant facilitating a brainstorming workshop.
+                            Based *only* on the workshop context provided below, generate a structured timed agenda for the workshop
+                            The agenda should logically flow towards achieving the workshop's objective within the workshop duration.
 
                             Workshop Context:
                             {pre_workshop_data}
 
                             Instructions:
-                            - Analyze the Workshop Title, Objective, Duration, and Participant count/roles.
-                            - Create a bulleted or numbered list representing the agenda flow.
-                            - Include estimated timings for each major section (e.g., Introduction: 10 mins, Brainstorming Session 1: 30 mins, Wrap-up: 15 mins). Ensure total time roughly matches the workshop duration.
-                            - Keep descriptions concise.
-                            - Output *only* the agenda list itself, with no introductory sentence, explanation, confidence scores, or any other text before or after the list. Use Markdown for formatting (e.g., bullet points).
-
-                            Generate the agenda proposal now:
+                            - Generate 4-5 bullet points to list the agenda items.
+                            - Include estimated time to complete each item.
+                            - Ensure it is related ot workshop context (based on the Title and Objective)
+                            
+                            Format:
+                            Output MUST be valid JSON with the key:
+                            - agenda:
+                            
+                            Response:
                             """
 
     # Initialize the Watsonx LLM (adjust parameters if needed for longer/structured output)
@@ -64,24 +66,14 @@ def generate_agenda_text(workshop_id):
     chain = agenda_prompt | watsonx_llm_agenda
     try:
         raw = chain.invoke({"pre_workshop_data": pre_workshop_data})
-        # Optional: Add basic logging
-        # current_app.logger.debug(f"Raw agenda generated for {workshop_id}: {raw_agenda[:100]}...")
-        print(f"[Agent] Workshop raw agenda for {workshop_id}: {raw}") # Keep if useful
-        # — JSON extraction for agenda
-        m = re.search(r"(\{.*\})", raw, re.DOTALL)
-        json_blob = m.group(1) if m else raw
-        try:
-            parsed = json.loads(json_blob)
-            # Return just the 'agenda' field
-            return parsed.get("agenda", "").strip()
-        except json.JSONDecodeError:
-            return raw.strip()
+        print(f"[Agenda Service] Workshop raw agenda _ID:{workshop_id}: {raw}") # DEBUG CODE
         
-        # return raw.strip() # Basic cleanup
+        return raw.strip()
+        
     except Exception as e:
         # Log the error
         # current_app.logger.error(f"LLM invocation failed for agenda generation (workshop {workshop_id}): {e}")
-        print(f"[Agent] Error generating agenda for {workshop_id}: {e}")
+        print(f"[Agenda Service] Error generating agenda _ID:{workshop_id}: {e}")
         return "Could not generate agenda due to an internal error."
 
 

@@ -1,10 +1,15 @@
-<div id="agenda-content-display" class="agenda-content border rounded p-2 bg-light mb-2">
+
+<!-- Displays JSON -->
+<!--div id="agenda-content-display" class="agenda-content border rounded p-2 bg-light mb-2">
   {% if workshop.agenda %}
       {{ workshop.agenda | markdown | safe }} {# Render Markdown #}
   {% else %}
       <p class="text-muted mb-0">No agenda provided.</p>
   {% endif %}
-</div>
+</div-->
+
+<!-- Display list of Agenda titles from JSON -->
+<ol id="agenda-titles-list" class="list-group list-group-numbered mt-2"></ol>
 {# Add controls for organizer #}
 {% if user_is_organizer %}
 <div class="mt-1 text-end"> {# Use text-end for alignment #}
@@ -16,4 +21,41 @@
   <i class="bi bi-pencil-square"></i> <span class="d-none d-md-inline">Edit</span>
 </a>
 </div>
+
+<script>
+  // EXTRACT TITLE FROM JSON AND UPDATE UI
+  document.addEventListener('DOMContentLoaded', () => {
+    // 1. Pull in the raw JSON string from the Jinja context
+    const raw = {{ workshop.agenda | tojson }};
+    // Extract JSON substring between first and last braces
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    const jsonString = (firstBrace !== -1 && lastBrace > firstBrace)
+      ? raw.substring(firstBrace, lastBrace + 1)
+      : raw;
+
+    let data = {};
+    try {
+      data = JSON.parse(jsonString);
+    } catch (e) {
+      console.error('Failed to parse agenda JSON:', e, '\nExtracted JSON:', jsonString, '\nRaw data:', raw);
+      return;
+    }
+
+    // 2. Extract the titles array
+    const items = Array.isArray(data.agenda) ? data.agenda : [];
+
+    // 3. Render each title into the container
+    const container = document.getElementById('agenda-titles-list');
+    container.innerHTML = '';  // clear any old content
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item';
+      li.textContent = item.title;
+      container.appendChild(li);
+    });
+  });
+  
+</script>
+
 {% endif %}

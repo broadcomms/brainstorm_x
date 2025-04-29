@@ -56,7 +56,7 @@ def generate_tip_text(workshop_id):
     chain = tip_prompt | watsonx_llm
     raw = chain.invoke({"pre_workshop_data": pre_workshop_data})
     
-    print(f"[DEBUG] Workshop raw LLM tip output: {workshop_id}: {raw}") # DEBUG CODE
+    print(f"[Tip Service] Workshop raw LLM tip output: {workshop_id}: {raw}") # DEBUG CODE
     #
     # # Logic to extract the text from the raw output
     #
