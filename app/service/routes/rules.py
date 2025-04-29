@@ -6,18 +6,20 @@ from langchain_ibm import WatsonxLLM
 from langchain_core.prompts import PromptTemplate
 from app.config import Config
 # Import the blueprint and the helper function from agent.py
-from .agent import agent_bp, aggregate_pre_workshop_data
+from .agent import agent_bp
 import markdown # If you plan to return HTML directly later
+from app.utils.data_aggregation import aggregate_pre_workshop_data
 
 # #-----------------------------------------------------------
 # # 2.b Generate rules and guidelines
 @agent_bp.route("/generate_rules_text/<int:workshop_id>", methods=["POST"])
 @login_required
 def generate_rules_text(workshop_id):
+    """ Service Generates suggested workshop rules using the LLM."""
     pre_workshop_data = aggregate_pre_workshop_data(workshop_id)
     if not pre_workshop_data:
         # Return a meaningful message or error response
-        return jsonify({"error": f"Could not aggregate data for workshop {workshop_id}. It might not exist or have no participants."}), 404
+        return jsonify({"error": f"Could not generate rules: Workshop data unavailable."}), 404
 
     # Define the prompt template for generating rules
     rules_prompt_template =   """
@@ -57,19 +59,18 @@ def generate_rules_text(workshop_id):
     # Invoke llm chain
     chain = rules_prompt | watsonx_llm_rules
     raw_rules = chain.invoke({"pre_workshop_data": pre_workshop_data})
-    
-    print(f"[Agent] Workshop raw rules: {workshop_id}: {raw_rules}") # DEBUG CODE
-    rules = raw_rules # return raw llm output
-    
-    # TODO: Save rules in the DB (Consider adding a field to the Workshop model)
-    # Example:
-    # workshop = Workshop.query.get(workshop_id)
-    # if workshop:
-    #     workshop.generated_rules = rules # Assuming you add a 'generated_rules' text field
-    #     db.session.commit()
 
-    # Return just the text for this specific route
-    return rules
+    try:
+        raw_rules = chain.invoke({"pre_workshop_data": pre_workshop_data})
+        # Optional logging
+        # current_app.logger.debug(f"Raw rules generated for {workshop_id}: {raw_rules[:100]}...")
+        print(f"[Agent] Workshop raw rules for {workshop_id}: {raw_rules}")
+        return raw_rules.strip()
+    except Exception as e:
+        # current_app.logger.error(f"LLM invocation failed for rules generation (workshop {workshop_id}): {e}")
+        print(f"[Agent] Error generating rules for {workshop_id}: {e}")
+        return "Could not generate rules due to an internal error."
+    
 
 @agent_bp.route("/generate_rules/<int:workshop_id>", methods=["POST"])
 @login_required

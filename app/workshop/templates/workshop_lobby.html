@@ -269,7 +269,7 @@
 
   async function handleRegenerateClick(event) {
       const button = event.currentTarget;
-      const type = button.dataset.type; // 'rules', 'icebreaker', 'tip'
+      const type = button.dataset.type; // 'rules', 'icebreaker', 'tip', 'agenda'
       if (!type) return;
 
       button.disabled = true;
@@ -287,16 +287,15 @@
           const data = await response.json();
 
           if (response.ok && data.success) {
-              // Update content directly (or rely on socket event)
-              // updateAiContentElement(type, data.content);
-              console.log(`${type} regenerated successfully.`);
-              // Socket event 'ai_content_update' should handle the UI update
+              // Success! The UI update will be handled by the 'ai_content_update' socket event
+              console.log(`${type} regeneration request successful. Waiting for update via socket.`);
           } else {
               throw new Error(data.message || `HTTP error ${response.status}`);
           }
       } catch (error) {
-          console.error(`Error regenerating ${type}:`, error);
-          alert(`Could not regenerate ${type}: ${error.message}`);
+        console.error(`Error requesting regeneration for ${type}:`, error);
+        // Display a more specific error if available from the server
+        alert(`Could not regenerate ${type}: ${error.message || 'Request failed.'}`);
       } finally {
           button.disabled = false;
           // Restore original button text/icon
@@ -438,10 +437,52 @@
   }
 
   function handleAiContentUpdate(data) {
-      console.log('AI content update received:', data);
-      if (data.workshop_id === workshopId && data.type && data.content) {
-          updateAiContentElement(data.type, data.content);
-      }
+    console.log('AI content update received:', data);
+    if (data.workshop_id === workshopId && data.type && data.content) {
+        let elementId;
+        // Map type to the correct element ID
+        switch (data.type) {
+            case 'agenda':
+                elementId = 'agenda-content-display'; // Use ID from service_agenda.html
+                break;
+            case 'rules':
+                elementId = 'ai-rules-content'; // Assuming this ID is in service_rules.html
+                break;
+            case 'icebreaker':
+                elementId = 'ai-icebreaker-content'; // Assuming this ID is in service_icebreaker.html
+                break;
+            case 'tip':
+                elementId = 'ai-tip-content'; // Assuming this ID is in service_tip.html
+                break;
+            default:
+                console.warn(`Unknown AI content type received: ${data.type}`);
+                return;
+        }
+
+        const element = document.getElementById(elementId);
+        if (element) {
+            // Update inner HTML directly with the rendered content from the server
+            element.innerHTML = data.content;
+            console.log(`Updated UI for ${data.type} using ID ${elementId}`);
+
+            // Special handling for icebreaker blockquote is no longer needed here
+            // if the server sends pre-rendered HTML including the blockquote.
+            // If the server ONLY sends the text content, you might need:
+            // if (data.type === 'icebreaker') {
+            //     const blockquote = element.querySelector('blockquote');
+            //     if (blockquote) {
+            //         blockquote.innerHTML = data.content;
+            //     } else {
+            //         element.innerHTML = `<figure class="mb-3"><blockquote class="blockquote mb-0">${data.content}</blockquote></figure>`;
+            //     }
+            // } else {
+            //     element.innerHTML = data.content;
+            // }
+
+        } else {
+            console.warn(`Element with ID '${elementId}' not found for AI content type: ${data.type}`);
+        }
+    }
   }
 
   function updateAiContentElement(type, htmlContent) {

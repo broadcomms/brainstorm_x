@@ -13,6 +13,7 @@ from flask import (
 )  
 from markupsafe import escape
 from flask_login import login_required, current_user
+import markdown # Import markdown
 
 from app.extensions import db, socketio
 from app.models import (
@@ -33,8 +34,11 @@ from sqlalchemy import or_
 from app.auth.routes import send_email  # TODO: Move send_email from auth to a extension module
 from datetime import datetime  # Import datetime
 
-# Import generate agenda text
 from app.service.routes.agenda import generate_agenda_text
+from app.service.routes.rules import generate_rules_text # Assuming this exists
+from app.service.routes.icebreaker import generate_icebreaker_text # Assuming this exists
+from app.service.routes.tip import generate_tip_text # Assuming this exists
+
 # Import aggregate_pre_workshop_data from the new utils file ---
 from app.utils.data_aggregation import aggregate_pre_workshop_data
 # Import extract_json_block
