@@ -105,7 +105,7 @@
             {% for p in participants %}
             <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2" id="participant-{{ p.user_id }}"> {# Add ID #}
               <span class="d-flex align-items-center gap-2 flex-grow-1">
-                <img src="{{ url_for('static', filename=p.user.profile_pic_url or 'default-profile.png') }}" alt="pic" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;">
+                <img src="{{ url_for('static', filename='images/default-profile.png') }}" alt="pic" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;">
                 {{ p.user.first_name or p.user.email }}
                 {% if p.role == 'organizer' or p.user_id == workshop.created_by_id %}<span class="badge bg-primary">Organizer</span>{% endif %}
               </span>
@@ -158,18 +158,18 @@
   const userId = {{ current_user.user_id }};
   const isOrganizer = {{ user_is_organizer | tojson }}; // Pass boolean to JS
   const lobbyRoom = `workshop_lobby_${workshopId}`;
-
+  const defaultProfilePicUrl = "{{ url_for('static', filename='images/default-profile.png') }}";
   // --- Socket.IO Setup ---
   const socket = io(); // Assuming connection is established in base.html
 
   socket.on('connect', () => {
-      console.log('Socket connected');
-      socket.emit('join_room', { room: lobbyRoom });
-      console.log(`Joined Socket.IO room: ${lobbyRoom}`);
+    console.log('Socket connected');
+    socket.emit('join_room', { room: lobbyRoom, workshop_id: workshopId, user_id: userId });
+    console.log(`Joined Socket.IO room: ${lobbyRoom}`);
   });
 
   socket.on('disconnect', () => {
-      console.log('Socket disconnected');
+    console.log('Socket disconnected');
   });
 
   // --- Event Listeners ---
@@ -193,30 +193,49 @@
   socket.on('participant_list_update', (data) => handleParticipantListUpdate(data)); // Full list refresh
   socket.on('ai_content_update', (data) => {
     console.log('AI content update received:', data);
-    if (data.workshop_id === workshopId && data.type === 'agenda') {
-        const agendaList = document.getElementById('agenda-titles-list');
-        if (agendaList) {
-            try {
-                // Use the JSON object directly from the server
-                const agendaItems = Array.isArray(data.content.agenda) ? data.content.agenda : [];
+    if (data.workshop_id === workshopId && data.type && data.content) {
+        let elementId;
+        switch (data.type) {
+            case 'agenda':
+                elementId = 'agenda-titles-list'; // ID for agenda list
+                break;
+            case 'rules':
+                elementId = 'ai-rules-content'; // ID for rules content
+                break;
+            case 'icebreaker':
+                elementId = 'ai-icebreaker-content'; // ID for icebreaker content
+                break;
+            case 'tip':
+                elementId = 'ai-tip-content'; // ID for tip content
+                break;
+            default:
+                console.warn(`Unknown AI content type received: ${data.type}`);
+                return;
+        }
 
-                // Clear the existing list
-                agendaList.innerHTML = '';
-
-                // Populate the list with new agenda items
-                agendaItems.forEach(item => {
-                    const li = document.createElement('li');
-                    li.className = 'list-group-item';
-                    li.textContent = item.activity; // Use the "activity" field from the JSON
-                    agendaList.appendChild(li);
-                });
-
-                console.log('Agenda list updated dynamically.');
-            } catch (e) {
-                console.error('Failed to render updated agenda:', e);
+        const element = document.getElementById(elementId);
+        if (element) {
+            if (data.type === 'agenda') {
+                // Update agenda list dynamically
+                try {
+                    const agendaItems = JSON.parse(data.content).agenda || [];
+                    element.innerHTML = ''; // Clear existing content
+                    agendaItems.forEach(item => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        li.textContent = item.activity; // Use the "activity" field
+                        element.appendChild(li);
+                    });
+                } catch (e) {
+                    console.error('Failed to parse agenda JSON:', e);
+                }
+            } else {
+                // Update other content types directly
+                element.innerHTML = data.content;
             }
+            console.log(`Updated UI for ${data.type}`);
         } else {
-            console.warn('Agenda list element not found.');
+            console.warn(`Element with ID '${elementId}' not found for AI content type: ${data.type}`);
         }
     }
   });
@@ -448,16 +467,19 @@
               li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2';
               li.id = `participant-${p.user_id}`;
               li.innerHTML = `
-                  <span class="d-flex align-items-center gap-2 flex-grow-1">
-                      <img src="${p.profile_pic_url || '{{ url_for('static', filename='default-profile.png') }}'}" alt="pic" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;">
-                      ${p.first_name || p.email}
-                      ${p.is_organizer ? '<span class="badge bg-primary ms-2">Organizer</span>' : ''}
-                  </span>
-                  <span class="badge bg-secondary" id="status-${p.user_id}">${p.status || 'Waiting'}</span>
-              `;
+                              <span class="d-flex align-items-center gap-2 flex-grow-1"> 
+                                  <img src="${p.profile_pic_url || defaultProfilePicUrl}" alt="pic" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;">
+                                  ${p.first_name || p.email}
+                                  ${p.is_organizer ? '<span class="badge bg-primary ms-2">Organizer</span>' : ''}
+                              </span>
+                              <span class="badge bg-secondary" id="status-${p.user_id}">${p.status || 'Waiting'}</span>
+                          `;
               listElement.appendChild(li);
           });
           countElement.textContent = data.participants.length;
+
+
+          
           // Also update the count in the top section if it exists
           const topCountElement = document.getElementById('participant-count');
            if (topCountElement) topCountElement.textContent = data.participants.length;
@@ -468,19 +490,18 @@
     console.log('AI content update received:', data);
     if (data.workshop_id === workshopId && data.type && data.content) {
         let elementId;
-        // Map type to the correct element ID
         switch (data.type) {
             case 'agenda':
-                elementId = 'agenda-content-display'; // Use ID from service_agenda.html
+                elementId = 'agenda-titles-list'; // ID for agenda list
                 break;
             case 'rules':
-                elementId = 'ai-rules-content'; // Assuming this ID is in service_rules.html
+                elementId = 'ai-rules-content'; // ID for rules content
                 break;
             case 'icebreaker':
-                elementId = 'ai-icebreaker-content'; // Assuming this ID is in service_icebreaker.html
+                elementId = 'ai-icebreaker-content'; // ID for icebreaker content
                 break;
             case 'tip':
-                elementId = 'ai-tip-content'; // Assuming this ID is in service_tip.html
+                elementId = 'ai-tip-content'; // ID for tip content
                 break;
             default:
                 console.warn(`Unknown AI content type received: ${data.type}`);
@@ -489,24 +510,25 @@
 
         const element = document.getElementById(elementId);
         if (element) {
-            // Update inner HTML directly with the rendered content from the server
-            element.innerHTML = data.content;
-            console.log(`Updated UI for ${data.type} using ID ${elementId}`);
-
-            // Special handling for icebreaker blockquote is no longer needed here
-            // if the server sends pre-rendered HTML including the blockquote.
-            // If the server ONLY sends the text content, you might need:
-            // if (data.type === 'icebreaker') {
-            //     const blockquote = element.querySelector('blockquote');
-            //     if (blockquote) {
-            //         blockquote.innerHTML = data.content;
-            //     } else {
-            //         element.innerHTML = `<figure class="mb-3"><blockquote class="blockquote mb-0">${data.content}</blockquote></figure>`;
-            //     }
-            // } else {
-            //     element.innerHTML = data.content;
-            // }
-
+            if (data.type === 'agenda') {
+                // Update agenda list dynamically
+                try {
+                    const agendaItems = JSON.parse(data.content).agenda || [];
+                    element.innerHTML = ''; // Clear existing content
+                    agendaItems.forEach(item => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        li.textContent = item.activity; // Use the "activity" field
+                        element.appendChild(li);
+                    });
+                } catch (e) {
+                    console.error('Failed to parse agenda JSON:', e);
+                }
+            } else {
+                // Update other content types directly
+                element.innerHTML = data.content;
+            }
+            console.log(`Updated UI for ${data.type}`);
         } else {
             console.warn(`Element with ID '${elementId}' not found for AI content type: ${data.type}`);
         }

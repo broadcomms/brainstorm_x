@@ -27,8 +27,11 @@ from .document.routes import document_bp
 from .workshop.routes import workshop_bp
 from .service.routes.agent import agent_bp
 
+# Example assuming static folder is inside 'app' directory
+static_dir = os.path.join(os.path.dirname(__file__), 'static')
+
 def create_app(config_filename=None):
-    app = Flask(__name__, instance_relative_config=True)
+    app = Flask(__name__, static_folder=static_dir, static_url_path='/static')
     app.config.from_object(Config)
 
     # Ensure instance folder exists
@@ -45,6 +48,8 @@ def create_app(config_filename=None):
     login_manager.init_app(app) # Initialize LoginManager
     mail.init_app(app) # Initialize Mail
     socketio.init_app(app, cors_allowed_origins="*", async_mode="eventlet")
+    # Register Socket.IO event handlers
+    from . import sockets  # noqa: F401
 
     # --- Flask-Login Configuration ---
     login_manager.login_view = 'auth_bp.login' # Route name for login page

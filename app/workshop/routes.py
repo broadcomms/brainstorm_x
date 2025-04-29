@@ -84,7 +84,10 @@ from concurrent.futures import ThreadPoolExecutor
 executor = ThreadPoolExecutor(max_workers=4)
 
 APP_NAME = os.getenv("APP_NAME", "BrainStormX")
-workshop_bp = Blueprint("workshop_bp", __name__, template_folder="templates")
+workshop_bp = Blueprint('workshop_bp', __name__,
+                        template_folder='templates'
+                        # Remove static_folder='static' if present and not intended
+                       )
 
 def load_or_schedule_ai_content(workshop, attr, generator_func, event_type):
     """
@@ -1296,26 +1299,25 @@ def edit_tip(workshop_id):
 def regenerate_agenda(workshop_id):
     workshop = check_organizer_permission(workshop_id)
     try:
-        new_agenda_raw = generate_agenda_text(workshop_id)  # Call the generator
-        new_agenda_json = json.loads(new_agenda_raw)  # Validate JSON
-
-        workshop.agenda = new_agenda_raw  # Save the raw JSON to the database
+        new_agenda = generate_agenda_text(workshop_id)
+        workshop.agenda = new_agenda
         db.session.commit()
 
-        # Emit the update to all connected clients
-        socketio.emit('ai_content_update', {
-            'workshop_id': workshop_id,
-            'type': 'agenda',
-            'content': new_agenda_json  # Emit the parsed JSON
-        }, room=f'workshop_lobby_{workshop_id}')
-        return jsonify({"success": True, "content": new_agenda_json})
-    except json.JSONDecodeError as e:
-        current_app.logger.error(f"Error regenerating agenda for workshop {workshop_id}: {e}")
-        return jsonify({"success": False, "message": "Invalid JSON format returned by the AI."}), 500
+        # Emit the update to the room
+        socketio.emit(
+            "ai_content_update",
+            {
+                "workshop_id": workshop_id,
+                "type": "agenda",
+                "content": new_agenda,
+            },
+            room=f"workshop_lobby_{workshop_id}",
+        )
+        return jsonify({"success": True}), 200
     except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error regenerating agenda for workshop {workshop_id}: {e}")
-        return jsonify({"success": False, "message": "Server error during regeneration."}), 500
+        current_app.logger.error(f"Error regenerating agenda: {e}")
+        return jsonify({"error": "Failed to regenerate agenda"}), 500
+
 
 @workshop_bp.route("/<int:workshop_id>/edit/agenda", methods=["POST"])
 @login_required
@@ -1957,6 +1959,7 @@ def next_task(workshop_id):
     # --- Call Agent ---
     # Pass the specific action plan item (or None) to the generator
     raw_task_data = generate_next_task_text(workshop_id, action_plan_item=next_action_plan_item)
+    cleaned_raw = extract
     cleaned_raw = extract_json_block(raw_task_data)
 
     try:
