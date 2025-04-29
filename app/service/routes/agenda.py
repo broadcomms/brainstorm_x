@@ -50,7 +50,7 @@ def generate_agenda_text(workshop_id):
             apikey=Config.WATSONX_API_KEY,
             params={
                 "decoding_method": "sample", # Sample might be better for creative agenda structure
-                "max_new_tokens": 350,      # Increased slightly
+                "max_new_tokens": 500,      # Increased slightly
                 "min_new_tokens": 50,
                 "temperature": 0.7,
                 "top_k": 50,
