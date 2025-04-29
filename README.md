@@ -125,11 +125,37 @@ pip install -r requirements.txt
 
 ```
 
-# Create The Project Structure
+# Run the application locally using the flask server
 ```
-# ensure script is executable
-chmod +x create_structure.sh
+# start flask server
+python run.py
+```
 
-# run script
-./create_structure.sh
+# Build and run the application as a docker container
+```
+# Build the Docker image
+docker build -t brainstorm_x .
+
+# Run the Docker container
+docker run -p 5001:5001 --name brainstorm_x -d brainstorm_x
+
+# Access the application in browser
+http://localhost:5001
+
+# Optionally, if you want to access the application detached mode
+docker run -d -p 5001:5001 --name brainstorm_x -d brainstormx
+
+```
+
+# Deploying application from docker container registry
+```
+# Tag the image
+docker tag brainstorm_x broadcomms/brainstorm_x:latest
+
+# Login to the Docker registry
+docker login
+
+# Push the image docker hub
+docker push broadcomms/brainstorm_x:latest
+
 ```
