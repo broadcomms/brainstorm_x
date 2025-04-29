@@ -1,5 +1,5 @@
 # app/service/routes/agenda.py
-import re
+import re  # Add this import for regex
 import json
 from flask import jsonify
 from flask_login import login_required
@@ -14,14 +14,10 @@ import markdown # If you plan to return HTML directly later
 # 1.b Generate workshop agenda (New Function)
 def generate_agenda_text(workshop_id):
     """Generates a suggested workshop agenda using the LLM."""
-    # --- Get pre workshop data (aggregated) ---
     pre_workshop_data = aggregate_pre_workshop_data(workshop_id)
     if not pre_workshop_data:
-        # TODO: Consider logging this error
-        # current_app.logger.error(f"Failed to get pre-workshop data for {workshop_id}")
         return "Could not generate agenda: Workshop data unavailable."
 
-    # Define the prompt template for generating an agenda
     agenda_prompt_template = """
                             You are an AI assistant facilitating a brainstorming workshop.
                             Based *only* on the workshop context provided below, generate a structured timed agenda for the workshop.
@@ -33,7 +29,7 @@ def generate_agenda_text(workshop_id):
                             Instructions:
                             - Generate 4-5 bullet points to list the agenda items.
                             - Include estimated time to complete each item.
-                            - Ensure it is related ot workshop context (based on the Title and Objective)
+                            - Ensure it is related to workshop context (based on the Title and Objective)
                             
                             Format:
                             Output MUST be valid JSON with the key "agenda", an array of objects each containing:
@@ -45,37 +41,38 @@ def generate_agenda_text(workshop_id):
                             Response:
                             """
 
-    # Initialize the Watsonx LLM (adjust parameters if needed for longer/structured output)
     watsonx_llm_agenda = WatsonxLLM(
-            model_id=Config.GRANITE_8B_INSTRUCT, # Using a constant from Config
-            url=Config.WATSONX_URL,
-            project_id=Config.WATSONX_PROJECT_ID,
-            apikey=Config.WATSONX_API_KEY,
-            params={
-                "decoding_method": "sample", # Sample might be better for creative agenda structure
-                "max_new_tokens": 800,      # Increased slightly
-                "min_new_tokens": 50,
-                "temperature": 0.7,
-                "top_k": 50,
-                "top_p": 0.9,
-                "repetition_penalty": 1.05
-            }
-        )
+        model_id=Config.GRANITE_8B_INSTRUCT,
+        url=Config.WATSONX_URL,
+        project_id=Config.WATSONX_PROJECT_ID,
+        apikey=Config.WATSONX_API_KEY,
+        params={
+            "decoding_method": "sample",
+            "max_new_tokens": 800,
+            "min_new_tokens": 50,
+            "temperature": 0.7,
+            "top_k": 50,
+            "top_p": 0.9,
+            "repetition_penalty": 1.05
+        }
+    )
 
-    # Define llm prompt
     agenda_prompt = PromptTemplate.from_template(agenda_prompt_template)
-
-    # Invoke llm chain
     chain = agenda_prompt | watsonx_llm_agenda
+
     try:
         raw = chain.invoke({"pre_workshop_data": pre_workshop_data})
-        print(f"[Agenda Service] Workshop raw agenda _ID:{workshop_id}: {raw}") # DEBUG CODE
-        
-        return raw.strip()
-        
+        print(f"[Agenda Service] Workshop raw agenda _ID:{workshop_id}: {raw}")  # Debugging
+
+        # Extract JSON block using regex
+        match = re.search(r"(\{.*\})", raw, re.DOTALL)
+        if match:
+            json_block = match.group(1)
+            return json_block.strip()
+        else:
+            raise ValueError("No valid JSON block found in the response.")
+
     except Exception as e:
-        # Log the error
-        # current_app.logger.error(f"LLM invocation failed for agenda generation (workshop {workshop_id}): {e}")
         print(f"[Agenda Service] Error generating agenda _ID:{workshop_id}: {e}")
         return "Could not generate agenda due to an internal error."
 

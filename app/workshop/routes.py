@@ -1296,19 +1296,22 @@ def edit_tip(workshop_id):
 def regenerate_agenda(workshop_id):
     workshop = check_organizer_permission(workshop_id)
     try:
-        new_agenda_raw = generate_agenda_text(workshop_id) # Call the new generator
-        if not new_agenda_raw.startswith("Could not generate"):
-            workshop.agenda = new_agenda_raw # Update the main agenda field
-            db.session.commit()
-            new_agenda_html = markdown.markdown(new_agenda_raw)
-            socketio.emit('ai_content_update', {
-                'workshop_id': workshop_id,
-                'type': 'agenda', # <-- Use 'agenda' type
-                'content': new_agenda_html
-            }, room=f'workshop_lobby_{workshop_id}')
-            return jsonify({"success": True, "content": new_agenda_html})
-        else:
-            return jsonify({"success": False, "message": "Failed to generate new agenda."}), 500
+        new_agenda_raw = generate_agenda_text(workshop_id)  # Call the generator
+        new_agenda_json = json.loads(new_agenda_raw)  # Validate JSON
+
+        workshop.agenda = new_agenda_raw  # Save the raw JSON to the database
+        db.session.commit()
+
+        # Emit the update to all connected clients
+        socketio.emit('ai_content_update', {
+            'workshop_id': workshop_id,
+            'type': 'agenda',
+            'content': new_agenda_json  # Emit the parsed JSON
+        }, room=f'workshop_lobby_{workshop_id}')
+        return jsonify({"success": True, "content": new_agenda_json})
+    except json.JSONDecodeError as e:
+        current_app.logger.error(f"Error regenerating agenda for workshop {workshop_id}: {e}")
+        return jsonify({"success": False, "message": "Invalid JSON format returned by the AI."}), 500
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error regenerating agenda for workshop {workshop_id}: {e}")
@@ -1946,7 +1949,8 @@ def next_task(workshop_id):
         # No action plan, proceed with generic task generation (or return error)
         current_app.logger.warning(f"No valid action plan found for workshop {workshop_id}. Generating generic task.")
         # You might want to return an error here if an action plan is mandatory
-        # return jsonify({"success": False, "message": "Workshop action plan is missing or invalid."}), 400
+        # return jsonify```python
+        # return jsonify({"success": False, "message": "Workshop action plan is missing or invalid."}),400
         # Or allow generic task generation by passing None
         next_action_plan_item = None
     
@@ -2043,4 +2047,6 @@ def submit_idea(workshop_id):
         "idea_id": idea.id
     }, room=f"workshop_room_{workshop_id}")
     return jsonify(success=True), 200
+
+
 

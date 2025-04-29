@@ -191,7 +191,35 @@
   socket.on('workshop_started', (data) => handleWorkshopStarted(data));
   socket.on('participant_update', (data) => handleParticipantUpdate(data)); // Generic status update
   socket.on('participant_list_update', (data) => handleParticipantListUpdate(data)); // Full list refresh
-  socket.on('ai_content_update', (data) => handleAiContentUpdate(data)); // Handle AI content updates
+  socket.on('ai_content_update', (data) => {
+    console.log('AI content update received:', data);
+    if (data.workshop_id === workshopId && data.type === 'agenda') {
+        const agendaList = document.getElementById('agenda-titles-list');
+        if (agendaList) {
+            try {
+                // Use the JSON object directly from the server
+                const agendaItems = Array.isArray(data.content.agenda) ? data.content.agenda : [];
+
+                // Clear the existing list
+                agendaList.innerHTML = '';
+
+                // Populate the list with new agenda items
+                agendaItems.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item';
+                    li.textContent = item.activity; // Use the "activity" field from the JSON
+                    agendaList.appendChild(li);
+                });
+
+                console.log('Agenda list updated dynamically.');
+            } catch (e) {
+                console.error('Failed to render updated agenda:', e);
+            }
+        } else {
+            console.warn('Agenda list element not found.');
+        }
+    }
+  });
 
   // --- Helper Functions ---
 

@@ -1,4 +1,3 @@
-
 <!-- Displays JSON -->
 <!--div id="agenda-content-display" class="agenda-content border rounded p-2 bg-light mb-2">
   {% if workshop.agenda %}
@@ -9,7 +8,18 @@
 </div-->
 
 <!-- Display list of Agenda titles from JSON -->
-<ol id="agenda-titles-list" class="list-group list-group-numbered mt-2"></ol>
+<ol id="agenda-titles-list" class="list-group list-group-numbered mt-2">
+  {% if workshop.agenda %}
+    {% set agenda_data = workshop.agenda | tojson | safe %}
+    {% set agenda_items = agenda_data.agenda if agenda_data.agenda else [] %}
+    {% for item in agenda_items %}
+      <li class="list-group-item">{{ item.activity }}</li>
+    {% endfor %}
+  {% else %}
+    <p class="text-muted">No agenda available.</p>
+  {% endif %}
+</ol>
+
 {# Add controls for organizer #}
 {% if user_is_organizer %}
 <div class="mt-1 text-end"> {# Use text-end for alignment #}
