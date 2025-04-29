@@ -32,11 +32,11 @@ def generate_agenda_text(workshop_id):
                             - Ensure it is related to workshop context (based on the Title and Objective)
                             
                             Format:
-                            Output MUST be valid JSON with the key "agenda", an array of objects each containing:
-                            - "time_slot"
-                            - "activity"
-                            - "description"
-                            - "estimated_duration"
+                            Output MUST be valid JSON with the key "agenda":, with an array of objects each containing the following keys:
+                            - "time_slot":
+                            - "activity":
+                            - "description":
+                            - "estimated_duration":
 
                             Response:
                             """
@@ -50,10 +50,10 @@ def generate_agenda_text(workshop_id):
             "decoding_method": "sample",
             "max_new_tokens": 800,
             "min_new_tokens": 50,
-            "temperature": 0.7,
-            "top_k": 50,
+            "temperature": 0.5,
+            "top_k": 45,
             "top_p": 0.9,
-            "repetition_penalty": 1.05
+            "repetition_penalty": 1.2
         }
     )
 
