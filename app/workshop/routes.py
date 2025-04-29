@@ -15,7 +15,36 @@ from markupsafe import escape
 from flask_login import login_required, current_user
 import markdown # Import markdown
 
-from app.extensions import db, socketio
+# --- Socket.IO Room Join/Leave Handlers ---
+from flask_socketio import join_room, leave_room
+
+from app.extensions import socketio
+
+@socketio.on('join_room')
+@login_required
+def handle_join_room(data):
+    """
+    Join the user to the specified Socket.IO room.
+    Expects data dict with key 'room'.
+    """
+    room = data.get('room')
+    if room:
+        join_room(room)
+        current_app.logger.info(f"User {current_user.user_id} joined room {room}")
+
+@socketio.on('leave_room')
+@login_required
+def handle_leave_room(data):
+    """
+    Remove the user from the specified Socket.IO room.
+    Expects data dict with key 'room'.
+    """
+    room = data.get('room')
+    if room:
+        leave_room(room)
+        current_app.logger.info(f"User {current_user.user_id} left room {room}")
+
+from app.extensions import db
 from app.models import (
     BrainstormIdea,
     BrainstormTask,

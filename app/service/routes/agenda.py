@@ -1,5 +1,6 @@
 # app/service/routes/agenda.py
-
+import re
+import json
 from flask import jsonify
 from flask_login import login_required
 from langchain_ibm import WatsonxLLM
@@ -62,11 +63,21 @@ def generate_agenda_text(workshop_id):
     # Invoke llm chain
     chain = agenda_prompt | watsonx_llm_agenda
     try:
-        raw_agenda = chain.invoke({"pre_workshop_data": pre_workshop_data})
+        raw = chain.invoke({"pre_workshop_data": pre_workshop_data})
         # Optional: Add basic logging
         # current_app.logger.debug(f"Raw agenda generated for {workshop_id}: {raw_agenda[:100]}...")
-        print(f"[Agent] Workshop raw agenda for {workshop_id}: {raw_agenda}") # Keep if useful
-        return raw_agenda.strip() # Basic cleanup
+        print(f"[Agent] Workshop raw agenda for {workshop_id}: {raw}") # Keep if useful
+        # — JSON extraction for agenda
+        m = re.search(r"(\{.*\})", raw, re.DOTALL)
+        json_blob = m.group(1) if m else raw
+        try:
+            parsed = json.loads(json_blob)
+            # Return just the 'agenda' field
+            return parsed.get("agenda", "").strip()
+        except json.JSONDecodeError:
+            return raw.strip()
+        
+        # return raw.strip() # Basic cleanup
     except Exception as e:
         # Log the error
         # current_app.logger.error(f"LLM invocation failed for agenda generation (workshop {workshop_id}): {e}")
