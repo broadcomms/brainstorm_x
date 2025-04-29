@@ -24,7 +24,7 @@ def generate_agenda_text(workshop_id):
     # Define the prompt template for generating an agenda
     agenda_prompt_template = """
                             You are an AI assistant facilitating a brainstorming workshop.
-                            Based *only* on the workshop context provided below, generate a structured timed agenda for the workshop
+                            Based *only* on the workshop context provided below, generate a structured timed agenda for the workshop.
                             The agenda should logically flow towards achieving the workshop's objective within the workshop duration.
 
                             Workshop Context:
@@ -36,9 +36,12 @@ def generate_agenda_text(workshop_id):
                             - Ensure it is related ot workshop context (based on the Title and Objective)
                             
                             Format:
-                            Output MUST be valid JSON with the key:
-                            - agenda:
-                            
+                            Output MUST be valid JSON with the key "agenda", an array of objects each containing:
+                            - "time_slot"
+                            - "activity"
+                            - "description"
+                            - "estimated_duration"
+
                             Response:
                             """
 
@@ -50,7 +53,7 @@ def generate_agenda_text(workshop_id):
             apikey=Config.WATSONX_API_KEY,
             params={
                 "decoding_method": "sample", # Sample might be better for creative agenda structure
-                "max_new_tokens": 500,      # Increased slightly
+                "max_new_tokens": 800,      # Increased slightly
                 "min_new_tokens": 50,
                 "temperature": 0.7,
                 "top_k": 50,

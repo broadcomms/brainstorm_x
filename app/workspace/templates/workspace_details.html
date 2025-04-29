@@ -257,6 +257,61 @@
     </form>
   </div>
 </div>
+<script>
+  // DEBUG AUTOFILL SCRIPT # TODO: Remove this when ready
+  document.addEventListener('DOMContentLoaded', function () {
+
+    console.log('Workspace Details auto-fill script loaded (includes invite modal).');
+
+    // --- Get reference to the modal ---
+    const inviteModal = document.getElementById('inviteModal');
+    const inviteEmailInput = document.getElementById('inviteEmail');
+    const inviteMessageTextarea = document.getElementById('inviteMessage');
+
+    // Function to toggle auto-fill (no change needed here)
+    window.toggleAutoFillWorkspaceDetails = function (enable) {
+        localStorage.setItem('autoFillWorkspaceDetails', enable);
+        console.log('Auto-fill Workspace Details ' + (enable ? 'enabled' : 'disabled'));
+    };
+
+    // --- MODIFIED: Apply auto-fill WHEN THE MODAL IS FULLY SHOWN ---
+    if (inviteModal) {
+        // *** Changed 'show.bs.modal' to 'shown.bs.modal' ***
+        inviteModal.addEventListener('shown.bs.modal', function (event) {
+            console.log('Invite modal has been shown, applying auto-fill if enabled.'); // Updated log
+            const autoFillEnabled = localStorage.getItem('autoFillWorkspaceDetails') === 'true';
+
+            if (autoFillEnabled) {
+                if (inviteEmailInput) {
+                    inviteEmailInput.value = 'demo.member@ai.broadcomms.net';
+                    console.log('Auto-filled invite email.');
+                } else {
+                    console.warn('Invite email input (#inviteEmail) not found inside modal listener.');
+                }
+
+                if (inviteMessageTextarea) {
+                    inviteMessageTextarea.value = 'Please join our workspace for collaboration!';
+                    console.log('Auto-filled invite message.');
+                } else {
+                    console.warn('Invite message textarea (#inviteMessage) not found inside modal listener.');
+                }
+            } else {
+                console.log('Auto-fill is disabled, not populating modal fields.');
+            }
+        });
+    } else {
+        console.warn('Invite modal element (#inviteModal) not found.');
+    }
+
+    // --- Keep console log for toggling ---
+    console.log('Workspace Details auto-fill script loaded. Use toggleAutoFillWorkspaceDetails(true) to enable or toggleAutoFillWorkspaceDetails(false) to disable.');
+
+    // --- Set default state for development ---
+    if (localStorage.getItem('autoFillWorkspaceDetails') === null) {
+        toggleAutoFillWorkspaceDetails(true); // Enable by default if not set
+    }
+});
+</script>
 {% endif %}
 {% endblock %}
 
@@ -267,11 +322,10 @@
   {{ super() }} {# Include scripts from base template #}
   {# Add Markdown library if not already included #}
   {# <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> #}
-  <script>
-    // Initialize Flatpickr if needed specifically here (though better in create/edit templates)
-    // flatpickr(".flatpickr-datetime", { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true });
 
-    // Initialize Markdown rendering for agenda if needed dynamically
-    // document.addEventListener('DOMContentLoaded', function() { ... });
-  </script>
+
+
+
 {% endblock %}
+
+

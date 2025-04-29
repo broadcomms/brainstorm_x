@@ -71,14 +71,14 @@
             // 2. Title
             const titleInput = document.querySelector('input[name="title"]');
             if (titleInput) {
-                titleInput.value = 'Auto-Generated Test Workshop';
+                titleInput.value = 'Biodegradable Packaging Ideation';
                 console.log('Auto-filled title.');
             }
 
             // 3. Objective
             const objectiveTextarea = document.querySelector('textarea[name="objective"]');
             if (objectiveTextarea) {
-                objectiveTextarea.value = 'To test the auto-fill functionality for workshop creation.';
+                objectiveTextarea.value = 'Identify and prototype 3 new biodegradable packaging concepts';
                 console.log('Auto-filled objective.');
             }
 
@@ -91,7 +91,7 @@
                 const year = futureDate.getFullYear();
                 const month = (futureDate.getMonth() + 1).toString().padStart(2, '0'); // JS months are 0-indexed
                 const day = futureDate.getDate().toString().padStart(2, '0');
-                const hours = '14'; // Example: 2 PM
+                const hours = '11'; // Example: 11:30 PM
                 const minutes = '30';
                 const formattedDateTime = `${year}-${month}-${day} ${hours}:${minutes}`;
 
@@ -107,17 +107,14 @@
             // 5. Duration
             const durationInput = document.querySelector('input[name="duration"]');
             if (durationInput) {
-                durationInput.value = '90';
+                durationInput.value = '60';
                 console.log('Auto-filled duration.');
             }
 
             // 6. Agenda
             const agendaTextarea = document.querySelector('textarea[name="agenda"]');
             if (agendaTextarea) {
-                agendaTextarea.value =
-`*   Item 1: Introduction
-*   Item 2: Core Content
-*   Item 3: Q&A`;
+                agendaTextarea.value = '';
                 console.log('Auto-filled agenda.');
             }
         }
