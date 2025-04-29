@@ -42,7 +42,7 @@
       return;
     }
 
-    // 2. Extract the titles array
+    // 2. Extract the activity title from the array
     const items = Array.isArray(data.agenda) ? data.agenda : [];
 
     // 3. Render each title into the container
@@ -51,7 +51,7 @@
     items.forEach(item => {
       const li = document.createElement('li');
       li.className = 'list-group-item';
-      li.textContent = item.title;
+      li.textContent = item.activity; // Display only activity as agenda item from the array
       container.appendChild(li);
     });
   });
