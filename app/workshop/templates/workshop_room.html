@@ -303,7 +303,7 @@
 
       tile.innerHTML = `
         <img src="${profilePic}" alt="${displayName}"
-             class="rounded-circle mb-1 shadow-sm" style="width:40px;height:40px;object-fit:cover; border: 1px solid #ccc;"
+             class="rounded-circle mb-1 shadow-sm" style="width:50px;height:50px;object-fit:cover; border: 1px solid #ccc;"
              title="${tooltipName}"
              onerror="this.onerror=null; this.src='{{ url_for('static', filename='images/default-profile.png') }}';">
         <div class="small text-muted text-truncate" style="font-size:0.75rem;line-height:1;max-width: 55px;">
@@ -537,7 +537,7 @@
     }
   }
 
-  // --- Socket.IO Setup ---
+  // --- Initialize Socket Connection ---
   const socket = io();
 
   socket.on('connect', () => {
@@ -641,7 +641,12 @@
   socket.on('receive_message', d => { /* (Keep as is) */ });
 
   // Participant list update event
-  socket.on('participant_list_update', data => { /* (Keep as is) */ });
+  socket.on('participant_list_update', data => { 
+    console.log("Received participant_list_update:", data);
+    if (data.workshop_id === workshopId) {
+        updateParticipantTiles(data.participants);
+    } 
+  });
 
   // --- Event Listeners (DOM Ready) ---
   document.addEventListener('DOMContentLoaded', () => {
@@ -663,6 +668,14 @@
           }, 100); // Small delay
         });
       }
+      // Leave room on unload
+      window.addEventListener('beforeunload', () => {
+          socket.emit('leave_room', { 
+            room: roomName, 
+            workshop_id: workshopId, 
+            user_id: userId 
+          });
+      });
 
       // --- MODIFIED: Begin Introduction Form (Organizer only) ---
       if (elements.beginIntroForm) {
