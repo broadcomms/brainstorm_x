@@ -104,8 +104,8 @@
 
         <div id="task-content" style="{{ '' if workshop.current_task_id else 'display:none;' }}">
           <h5 id="task-title"></h5>
-          <p id="task-description"></p> {# Combined description/instructions area #}
-          {# <span id="task-instructions"></span> Removed, combined into description #}
+          <p id="task-description"></p>
+          <span id="task-instructions"></span>
         </div>
 
         <!-- pause overlay -->
@@ -429,16 +429,36 @@
 
     elements.taskPlaceholder.style.display = 'none';
     elements.taskContent.style.display = 'block';
+
+    // Current Task Title
     elements.taskTitle.textContent = data.title || "Workshop Task";
 
-    // Build description HTML (same as before)
+    // Build description HTML based on task type
     let descriptionHtml = '';
     if (data.welcome && data.goals && data.rules && data.task) { // Intro task
-        descriptionHtml = `...`; // (Keep the HTML structure from previous version)
+        
+        descriptionHtml = `
+
+              <p class="mb-2"> ${data.welcome}</p>
+              <p class="mb-2"> ${data.goals}</p>
+              <p class="mb-2"> ${data.rules}</p>
+              <p class="mb-2"> ${data.instructions}</p>
+              
+              <hr>
+              <p class="mb-2" style="font-weight: bold;">Icebreaker</p>
+              <p class="mb-2 fs-4">${data.task}</p>
+              <p class="mb-2" style="font-weight: bold;">Instruction</p>
+              <p class="mb-2"> ${data.task_description}</p>
+              `
+
     } else { // Subsequent task
-        descriptionHtml = `...`; // (Keep the HTML structure from previous version)
+        descriptionHtml = `Next Task`; // (Keep the HTML structure from previous version)
     }
     elements.taskDescription.innerHTML = descriptionHtml;
+
+
+
+
 
     // Show and enable/disable idea form based on workshop status
     const isPaused = workshopStatus === 'paused';
