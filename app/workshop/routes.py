@@ -14,7 +14,7 @@ from flask import (
 from markupsafe import escape
 from flask_login import login_required, current_user
 import markdown # Import markdown
-
+from datetime import datetime, timedelta
 
 # --- Socket.IO Room Join/Leave Handlers ---
 from flask_socketio import join_room, leave_room
@@ -90,6 +90,21 @@ workshop_bp = Blueprint('workshop_bp', __name__,
                         template_folder='templates'
                         # Remove static_folder='static' if present and not intended
                        )
+
+# --- Import Socket.IO Emitters ---
+# It's cleaner to import specific emitters if sockets.py defines them
+from app.sockets import (
+    emit_introduction_start,
+    emit_task_ready,
+    emit_workshop_paused,
+    emit_workshop_resumed,
+    emit_workshop_stopped,
+    # Import helpers needed for beacon_leave simulation if defined in sockets.py
+    _sid_registry,
+    _room_presence,
+    _broadcast_participant_list
+)
+
 
 def load_or_schedule_ai_content(workshop, attr, generator_func, event_type):
     """
@@ -1528,154 +1543,171 @@ def extract_json_block(text):
 
 
 
+# --- Render Workshop Room ---
 @workshop_bp.route("/room/<int:workshop_id>")
 @login_required
 def workshop_room(workshop_id):
-    """Displays the main workshop room when it's in progress."""
-    workshop = Workshop.query.get_or_404(workshop_id)
+    """Displays the main workshop room."""
+    workshop = Workshop.query.options(
+        selectinload(Workshop.current_task) # Eager load current task if needed often
+    ).get_or_404(workshop_id)
+
     participant = WorkshopParticipant.query.filter_by(
         workshop_id=workshop.id, user_id=current_user.user_id
     ).first()
 
-    # Permission checks
     if not participant:
         flash("You are not a participant in this workshop.", "danger")
         return redirect(url_for("workshop_bp.list_workshops"))
 
+    # Redirect based on status
     if workshop.status == "scheduled":
-        flash("Workshop has not started yet. Waiting in lobby...", "info")
         return redirect(url_for("workshop_bp.workshop_lobby", workshop_id=workshop_id))
     elif workshop.status == "completed":
-        flash("Workshop completed. Viewing report...", "info")
         return redirect(url_for("workshop_bp.workshop_report", workshop_id=workshop_id))
-    
-    elif workshop.status != "inprogress" and workshop.status != "paused":
+    elif workshop.status not in ["inprogress", "paused"]:
         flash(f"Workshop status is '{workshop.status}'. Cannot access room.", "warning")
         return redirect(url_for("workshop_bp.view_workshop", workshop_id=workshop_id))
-    
-    # Get participants list
-    participants = WorkshopParticipant.query.filter_by(workshop_id=workshop.id).all()
 
-    # TODO: Add logic for real-time features (transcription, chat, etc.)
+    # No need to fetch participants/docs here, JS will request/receive via sockets
+
     return render_template(
         "workshop_room.html",
         workshop=workshop,
-        participants=participants,
-        current_participant=participant,
+        # Pass minimal necessary data, JS handles the rest
+        # participants=participants, # Removed, handled by sockets
+        current_participant=participant, # Keep for user context
     )
 
+# --- Workshop Lifecycle Routes ---
 
-# Use POST for actions that change state
 @workshop_bp.route("/start/<int:workshop_id>", methods=["POST"])
 @login_required
 def start_workshop(workshop_id):
     """Starts the workshop (organizer only)."""
     workshop = Workshop.query.get_or_404(workshop_id)
-    participant = WorkshopParticipant.query.filter_by(
-        workshop_id=workshop.id, user_id=current_user.user_id
-    ).first()
-
-    # Permission Check: Must be the organizer (or creator, adjust as needed)
-    # Using creator for simplicity here, adjust if 'organizer' role is strictly enforced
-    if not participant or workshop.created_by_id != current_user.user_id:
-        # Or check: if not participant or participant.role != 'organizer':
-        flash("You do not have permission to start this workshop.", "danger")
-        # Return an error response suitable for AJAX if called via JS, or redirect
-        return (
-            jsonify({"success": False, "message": "Permission denied"}),
-            403,
-        )  # Or redirect
+    if not is_organizer(workshop, current_user): # Use helper
+        return jsonify({"success": False, "message": "Permission denied"}), 403
 
     if workshop.status != "scheduled":
-        flash(f"Workshop cannot be started (status: {workshop.status}).", "warning")
-        return (
-            jsonify(
-                {"success": False, "message": f"Workshop status is {workshop.status}"}
-            ),
-            400,
-        )  # Or redirect
+        return jsonify({"success": False, "message": f"Workshop status is {workshop.status}"}), 400
 
-    # Update workshop status
     workshop.status = "inprogress"
-    # Optionally record the actual start time
-    # workshop.actual_start_time = datetime.utcnow()
+    # Reset timer fields in case it was previously stopped/paused incorrectly
+    workshop.current_task_id = None
+    workshop.timer_start_time = None
+    workshop.timer_paused_at = None
+    workshop.timer_elapsed_before_pause = 0
+    workshop.current_task_index = None # Reset task sequence index
+
     db.session.commit()
 
-    # --- Emit WebSocket event to notify lobby participants ---
     socketio.emit(
         "workshop_started",
         {"workshop_id": workshop_id},
         room=f"workshop_lobby_{workshop_id}",
     )
-    # --------------------------------------------------------
-
-    flash("Workshop started successfully!", "success")
-    # Redirect organizer to the room, or return success for AJAX
-    # return redirect(url_for('workshop_bp.workshop_room', workshop_id=workshop_id))
-    return jsonify(
-        {
-            "success": True,
-            "message": "Workshop started",
-            "redirect_url": url_for(
-                "workshop_bp.workshop_room", workshop_id=workshop_id
-            ),
-        }
+    socketio.emit(
+        "workshop_status_update",
+        {"workshop_id": workshop_id, "status": "inprogress"},
+        room=f"workshop_room_{workshop_id}",
     )
 
 
-# Use POST for actions that change state
+    flash("Workshop started successfully!", "success")
+    return jsonify(
+        success=True,
+        message="Workshop started",
+        redirect_url=url_for("workshop_bp.workshop_room", workshop_id=workshop_id),
+    )
+
+@workshop_bp.route("/pause/<int:workshop_id>", methods=["POST"])
+@login_required
+def pause_workshop(workshop_id):
+    """Pauses the workshop (organizer only)."""
+    workshop = Workshop.query.get_or_404(workshop_id)
+    if not is_organizer(workshop, current_user):
+        return jsonify({"success": False, "message": "Permission denied"}), 403
+
+    if workshop.status != "inprogress":
+        return jsonify({"success": False, "message": f"Workshop status is {workshop.status}"}), 400
+
+    workshop.status = "paused"
+    if workshop.timer_start_time: # Only calculate elapsed time if a timer was running
+        elapsed_this_run = (datetime.utcnow() - workshop.timer_start_time).total_seconds()
+        workshop.timer_elapsed_before_pause += int(elapsed_this_run)
+        workshop.timer_paused_at = datetime.utcnow()
+        workshop.timer_start_time = None # Clear start time as it's now paused
+
+    db.session.commit()
+
+    emit_workshop_paused(f"workshop_room_{workshop_id}", workshop_id) # Use helper emitter
+
+    flash("Workshop paused successfully.", "success")
+    # No redirect needed if handled by socket event + JS reload
+    return jsonify(success=True, message="Workshop paused")
+
+
+@workshop_bp.route("/resume/<int:workshop_id>", methods=["POST"])
+@login_required
+def resume_workshop(workshop_id):
+    """Resumes the workshop (organizer only)."""
+    workshop = Workshop.query.get_or_404(workshop_id)
+    if not is_organizer(workshop, current_user):
+        return jsonify({"success": False, "message": "Permission denied"}), 403
+
+    if workshop.status != "paused":
+        return jsonify({"success": False, "message": f"Workshop status is {workshop.status}"}), 400
+
+    workshop.status = "inprogress"
+    if workshop.current_task_id and workshop.timer_paused_at: # Only set start time if resuming a task timer
+        workshop.timer_start_time = datetime.utcnow() # Set new start time for the current run
+        workshop.timer_paused_at = None # Clear paused time
+
+    db.session.commit()
+
+    emit_workshop_resumed(f"workshop_room_{workshop_id}", workshop_id) # Use helper emitter
+
+    flash("Workshop resumed successfully.", "success")
+    # No redirect needed if handled by socket event + JS reload
+    return jsonify(success=True, message="Workshop resumed")
+
+
+
 @workshop_bp.route("/stop/<int:workshop_id>", methods=["POST"])
 @login_required
 def stop_workshop(workshop_id):
     """Stops the workshop (organizer only)."""
     workshop = Workshop.query.get_or_404(workshop_id)
-    participant = WorkshopParticipant.query.filter_by(
-        workshop_id=workshop.id, user_id=current_user.user_id
-    ).first()
+    if not is_organizer(workshop, current_user):
+        return jsonify({"success": False, "message": "Permission denied"}), 403
 
-    # Permission Check: Must be the organizer
-    if not participant or workshop.created_by_id != current_user.user_id:
-        # Or check: if not participant or participant.role != 'organizer':
-        flash("You do not have permission to stop this workshop.", "danger")
-        return (
-            jsonify({"success": False, "message": "Permission denied"}),
-            403,
-        )  # Or redirect
+    # Allow stopping from 'inprogress' or 'paused'
+    if workshop.status not in ["inprogress", "paused"]:
+        return jsonify({"success": False, "message": f"Workshop status is {workshop.status}"}), 400
 
-    if workshop.status != "inprogress":
-        flash(f"Workshop cannot be stopped (status: {workshop.status}).", "warning")
-        return (
-            jsonify(
-                {"success": False, "message": f"Workshop status is {workshop.status}"}
-            ),
-            400,
-        )  # Or redirect
-
-    # Update workshop status
     workshop.status = "completed"
-    # Optionally record the actual end time
-    # workshop.actual_end_time = datetime.utcnow()
+    # Clear current task and timer state
+    if workshop.current_task_id:
+        task = BrainstormTask.query.get(workshop.current_task_id)
+        if task and task.status == 'running':
+            task.status = 'completed' # Mark task as completed
+            task.ended_at = datetime.utcnow()
+    workshop.current_task_id = None
+    workshop.timer_start_time = None
+    workshop.timer_paused_at = None
+    workshop.timer_elapsed_before_pause = 0
+    # workshop.current_task_index = None # Keep index if needed for report?
+
     db.session.commit()
 
-    # --- Emit WebSocket event to notify room participants ---
-    socketio.emit(
-        "workshop_stopped",
-        {"workshop_id": workshop_id},
-        room=f"workshop_room_{workshop_id}",
-    )
-    # ------------------------------------------------------
+    emit_workshop_stopped(f"workshop_room_{workshop_id}", workshop_id) # Use helper emitter
 
     flash("Workshop stopped and completed.", "success")
-    # Redirect organizer to the report, or return success for AJAX
-    # return redirect(url_for('workshop_bp.workshop_report', workshop_id=workshop_id))
     return jsonify(
-        {
-            "success": True,
-            "message": "Workshop stopped",
-            "redirect_url": url_for(
-                "workshop_bp.workshop_report", workshop_id=workshop_id
-            ),
-        }
+        success=True,
+        message="Workshop stopped",
+        redirect_url=url_for("workshop_bp.workshop_report", workshop_id=workshop_id),
     )
 
 
@@ -1721,145 +1753,9 @@ def workshop_report(workshop_id):
     )
     # TODO: Pass report data here
 
-##################### PAUSE AND RESUME WORKSHOP ####################################
-
-# Pause workshop
-@workshop_bp.route("/pause/<int:workshop_id>", methods=["POST"])
-@login_required
-def pause_workshop(workshop_id):
-    """Pauses the workshop (organizer only)."""
-    workshop = Workshop.query.get_or_404(workshop_id)
-    participant = WorkshopParticipant.query.filter_by(
-        workshop_id=workshop.id, user_id=current_user.user_id
-    ).first()
-    # Permission Check: Must be the organizer
-    if not participant or workshop.created_by_id != current_user.user_id:
-        flash("You do not have permission to pause this workshop.", "danger")
-        return (
-            jsonify({"success": False, "message": "Permission denied"}),
-            403,
-        )
-    # Or check: if not participant or participant.role != 'organizer':
-    # Check status
-    if workshop.status != "inprogress":
-        # Only allow pausing if currently in progress
-        # or already paused
-        flash(f"Workshop cannot be paused (status: {workshop.status}).", "warning")
-        return (
-            jsonify(
-                {"success": False, "message": f"Workshop status is {workshop.status}"}
-            ),
-            400,
-        )
-    # Update workshop status
-    workshop.status = "paused"
-    # Optionally record the actual pause time
-    # workshop.actual_pause_time = datetime.utcnow()
-    db.session.commit()
-    # --- Emit WebSocket event to notify room participants ---
-    socketio.emit(
-        "workshop_paused",
-        {"workshop_id": workshop_id},
-        room=f"workshop_room_{workshop_id}",
-    )
-    # ------------------------------------------------------
-    flash("Workshop paused successfully.", "success")
-    return jsonify(
-        success=True, 
-        redirect_url=url_for("workshop_bp.workshop_room", workshop_id=workshop_id)
-        )
-    
-# Resume workshop
-@workshop_bp.route("/resume/<int:workshop_id>", methods=["POST"])
-@login_required
-def resume_workshop(workshop_id):
-    """Resumes the workshop (organizer only)."""
-    workshop = Workshop.query.get_or_404(workshop_id)
-    participant = WorkshopParticipant.query.filter_by(
-        workshop_id=workshop.id, user_id=current_user.user_id
-    ).first()
-    # Permission Check: Must be the organizer
-    if not participant or workshop.created_by_id != current_user.user_id:
-        flash("You do not have permission to resume this workshop.", "danger")
-        return (
-            jsonify({"success": False, "message": "Permission denied"}),
-            403,
-        )
-    # Or check: if not participant or participant.role != 'organizer':
-    # Check status
-    if workshop.status != "paused":
-        flash(f"Workshop cannot be resumed (status: {workshop.status}).", "warning")
-        return (
-            jsonify(
-                {"success": False, "message": f"Workshop status is {workshop.status}"}
-            ),
-            400,
-        )
-    # Update workshop status
-    workshop.status = "inprogress"
-    # Optionally record the actual resume time
-    # workshop.actual_resume_time = datetime.utcnow()
-    db.session.commit()
-    # --- Emit WebSocket event to notify room participants ---
-    socketio.emit(
-        "workshop_resumed",
-        {"workshop_id": workshop_id},
-        room=f"workshop_room_{workshop_id}",
-    )
-    # ------------------------------------------------------
-    flash("Workshop resumed successfully.", "success")
-    return jsonify(
-        success=True,
-        redirect_url=url_for("workshop_bp.workshop_room", workshop_id=workshop_id)
-    )
-    
-    
-# restart workshop
-@workshop_bp.route("/restart/<int:workshop_id>", methods=["POST"])
-@login_required
-def restart_workshop(workshop_id):
-    """Restarts the workshop (organizer only)."""
-    workshop = Workshop.query.get_or_404(workshop_id)
-    participant = WorkshopParticipant.query.filter_by(
-        workshop_id=workshop.id, user_id=current_user.user_id
-    ).first()
-    # Permission Check: Must be the organizer
-    if not participant or workshop.created_by_id != current_user.user_id:
-        flash("You do not have permission to restart this workshop.", "danger")
-        return (
-            jsonify({"success": False, "message": "Permission denied"}),
-            403,
-        )
-    # Or check: if not participant or participant.role != 'organizer':
-    # Check status
-    if workshop.status != "cancelled":
-        flash(f"Workshop cannot be restarted (status: {workshop.status}).", "warning")
-        return (
-            jsonify(
-                {"success": False, "message": f"Workshop status is {workshop.status}"}
-            ),
-            400,
-        )
-    # Update workshop status
-    workshop.status = "inprogress"
-    # Optionally record the actual restart time
-    # workshop.actual_restart_time = datetime.utcnow()
-    db.session.commit()
-    # --- Emit WebSocket event to notify room participants ---
-    socketio.emit(
-        "workshop_restarted",
-        {"workshop_id": workshop_id},
-        room=f"workshop_room_{workshop_id}",
-    )
-    # ------------------------------------------------------
-    flash("Workshop restarted successfully.", "success")
-    return jsonify(
-        success=True,
-        redirect_url=url_for("workshop_bp.workshop_room", workshop_id=workshop_id)
-    )
 
 # #################################################################################
-# WORKSHOP ROOM
+# WORKSHOP TASK MANAGEMENT ROUTES
 ##################################################################################
 # --- Begin Workshop Introduction Task ---
 @workshop_bp.route("/<int:workshop_id>/begin_intro", methods=["POST"])
@@ -1869,240 +1765,223 @@ def begin_intro(workshop_id):
     if not is_organizer(workshop, current_user):
         return jsonify(success=False, message="Permission denied"), 403
 
+    # Prevent starting intro if already started or not scheduled/inprogress
+    if workshop.current_task_id or workshop.status not in ['scheduled', 'inprogress']:
+         return jsonify(success=False, message="Workshop introduction cannot be started at this time."), 400
+
+    # If starting from scheduled, update status
+    if workshop.status == 'scheduled':
+        workshop.status = 'inprogress'
+
     result = get_introduction_payload(workshop_id)
-    # If we got back a tuple, it's an error (message, code)
     if isinstance(result, tuple) and not isinstance(result[0], dict):
         err_msg, code = result
         return jsonify(success=False, message=err_msg), code
 
-    payload = result  # the dict from the LLM JSON
-# --- FIX: Create a BrainstormTask for the Introduction ---
+    payload = result
     try:
-        # Extract duration, default to 60 if missing or invalid
         try:
             duration_seconds = int(payload.get("task_duration", 60))
         except (ValueError, TypeError):
             duration_seconds = 60
-            current_app.logger.warning(f"Invalid or missing task_duration in intro payload for workshop {workshop_id}, defaulting to 60s.")
+            current_app.logger.warning(f"Invalid task_duration in intro payload for {workshop_id}, defaulting to 60s.")
 
         intro_task = BrainstormTask(
             workshop_id=workshop_id,
-            # Use a consistent title or derive from payload
             title=payload.get("title", "Introduction & Warm-up"),
-            # Store the specific warm-up question/task as the prompt
-            prompt=payload.get("task", "Warm-up activity"),
+            prompt=json.dumps(payload), # Store full payload for context
             duration=duration_seconds,
-            status="running", # Start it immediately
+            status="running",
             started_at=datetime.utcnow()
-            # You might want to store the full payload in prompt if needed later:
-            # prompt=json.dumps(payload)
         )
         db.session.add(intro_task)
-        db.session.commit() # Commit to get the ID
+        db.session.flush() # Get the ID
 
-        # --- FIX: Add the new task_id to the payload ---
-        payload['task_id'] = intro_task.id
-        current_app.logger.info(f"Created introduction task {intro_task.id} for workshop {workshop_id}")
+        # Update workshop state
+        workshop.current_task_id = intro_task.id
+        workshop.timer_start_time = intro_task.started_at # Use task start time
+        workshop.timer_paused_at = None
+        workshop.timer_elapsed_before_pause = 0
+        workshop.current_task_index = -1 # Indicate intro task is before index 0 of action plan
 
-        # Emit the *modified* payload including the task_id
-        socketio.emit('introduction_start', payload, room=f'workshop_room_{workshop.id}')
+        db.session.commit()
+
+        payload['task_id'] = intro_task.id # Add task ID to payload for client
+        payload['duration'] = intro_task.duration # Ensure duration is correct
+
+        emit_introduction_start(f'workshop_room_{workshop.id}', payload) # Use helper
         return jsonify(success=True)
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error creating introduction task for workshop {workshop_id}: {e}", exc_info=True)
-        return jsonify(success=False, message="Error creating introduction task."), 500
-    # --- End Fix ---
+        current_app.logger.error(f"Error creating/starting intro task for {workshop_id}: {e}", exc_info=True)
+        return jsonify(success=False, message="Error starting introduction task."), 500
+
 
 
 
 # --- Workshop Next Task --------------
-@workshop_bp.route("/next_task/<int:workshop_id>", methods=["POST"])
+@workshop_bp.route("/<int:workshop_id>/next_task", methods=["POST"])
 @login_required
 def next_task(workshop_id):
     workshop = Workshop.query.get_or_404(workshop_id)
-    if workshop.created_by_id != current_user.user_id:
+    if not is_organizer(workshop, current_user):
         return jsonify({"success": False, "message": "Permission denied"}), 403
-    
-    # --- Action Plan Logic ---
+
+    # Mark previous task as completed (if any)
+    if workshop.current_task_id:
+        previous_task = BrainstormTask.query.get(workshop.current_task_id)
+        if previous_task and previous_task.status == 'running':
+            previous_task.status = 'completed'
+            previous_task.ended_at = datetime.utcnow()
+            # No need to commit yet, will commit with new task
+
+    # --- Action Plan Logic (Simplified from original) ---
     action_plan_items = []
     next_action_plan_item = None
     next_index = 0
 
     if workshop.task_sequence:
         try:
-            # Clean potential markdown/fencing if LLM added it
             cleaned_json_string = extract_json_block(workshop.task_sequence)
             action_plan_items = json.loads(cleaned_json_string)
-            if not isinstance(action_plan_items, list):
-                action_plan_items = [] # Ensure it's a list
+            if not isinstance(action_plan_items, list): action_plan_items = []
         except (json.JSONDecodeError, TypeError):
-            current_app.logger.warning(f"Could not parse action plan JSON for workshop {workshop_id}. Proceeding without plan.")
             action_plan_items = []
 
     if action_plan_items:
-        current_index = workshop.current_action_plan_index
-        if current_index is None: # First task after intro
-            next_index = 0
-        else:
-            next_index = current_index + 1
+        current_index = workshop.current_task_index if workshop.current_task_index is not None else -1
+        next_index = current_index + 1
 
         if 0 <= next_index < len(action_plan_items):
             next_action_plan_item = action_plan_items[next_index]
-            current_app.logger.info(f"Next task for workshop {workshop_id} based on action plan item {next_index}: {next_action_plan_item.get('phase')}")
         else:
-            # Reached the end of the action plan
-            current_app.logger.info(f"Workshop {workshop_id} has completed all action plan items.")
-            # Option 1: Stop generating tasks
-            # return jsonify({"success": False, "message": "All planned tasks completed."}), 400
-            # Option 2: Generate a generic wrap-up task (pass None to agent)
-            next_action_plan_item = {"phase": "Wrap-up", "description": "Discuss key takeaways and next steps."}
-            # Or Option 3: Emit a specific event
-            # socketio.emit("plan_completed", {...}, room=f"workshop_room_{workshop_id}")
-            # return jsonify({"success": True, "message": "Action plan complete."}), 200
-
+            # End of plan - maybe emit event or just stop?
+            socketio.emit("action_plan_complete", {"workshop_id": workshop_id}, room=f"workshop_room_{workshop_id}")
+            # Clear current task state
+            workshop.current_task_id = None
+            workshop.timer_start_time = None
+            workshop.timer_paused_at = None
+            workshop.timer_elapsed_before_pause = 0
+            db.session.commit()
+            return jsonify({"success": True, "message": "Action plan completed."}), 200
     else:
-        # No action plan, proceed with generic task generation (or return error)
-        current_app.logger.warning(f"No valid action plan found for workshop {workshop_id}. Generating generic task.")
-        # You might want to return an error here if an action plan is mandatory
-        # return jsonify```python
-        # return jsonify({"success": False, "message": "Workshop action plan is missing or invalid."}),400
-        # Or allow generic task generation by passing None
-        next_action_plan_item = None
-    
+        # No plan, generate generic or error
+        current_app.logger.warning(f"No valid action plan for {workshop_id}. Generating generic task.")
+        next_action_plan_item = None # Signal generic task generation
+
     # --- Call Agent ---
-    # Pass the specific action plan item (or None) to the generator
     raw_task_data = generate_next_task_text(workshop_id, action_plan_item=next_action_plan_item)
-    cleaned_raw = extract
     cleaned_raw = extract_json_block(raw_task_data)
 
     try:
         task_payload = json.loads(cleaned_raw)
-        if not isinstance(task_payload, dict): # Basic validation
-             raise ValueError("LLM did not return a JSON object")
+        if not isinstance(task_payload, dict): raise ValueError("LLM did not return a JSON object")
     except (json.JSONDecodeError, ValueError) as e:
-        current_app.logger.error(f"Failed to parse next task JSON from LLM for workshop {workshop_id}: {e}. Raw: {raw_task_data[:200]}")
-        # Try to extract at least a description if possible, otherwise fail
-        fallback_description = raw_task_data if isinstance(raw_task_data, str) else "Error generating task details."
-        task_payload = {
-            "title": "Task Generation Error",
-            "task_type": "Error",
-            "task_description": fallback_description,
-            "instructions": "Please contact the organizer.",
-            "task_duration": "60" # Default duration
-        }
-        # Or return a hard error:
-        # return jsonify({"success": False, "message": "Invalid task format received from AI."}), 500
+        current_app.logger.error(f"Failed to parse next task JSON for {workshop_id}: {e}. Raw: {raw_task_data[:200]}")
+        return jsonify({"success": False, "message": "Invalid task format received from AI."}), 500
 
     # --- Duration Parsing ---
-    raw_duration = task_payload.get("task_duration", "60") # Default to 60 seconds
-    duration_seconds = 60 # Default
-    if isinstance(raw_duration, (int, float)):
-        duration_seconds = int(raw_duration)
-    elif isinstance(raw_duration, str):
-        match = re.match(r"(\d+)", raw_duration) # Extract leading numbers
-        if match:
-            duration_seconds = int(match.group(1))
-            # Optional: Check for 'minute' and multiply
-            if "minute" in raw_duration.lower():
-                 duration_seconds *= 60
-        else:
-             current_app.logger.warning(f"Could not parse duration '{raw_duration}', defaulting to 60s.")
-             duration_seconds = 60
-             
+    try:
+        duration_seconds = int(task_payload.get("task_duration", 60))
+    except (ValueError, TypeError):
+        duration_seconds = 60
+
     # --- Persist Task ---
-    task = BrainstormTask(
-        workshop_id=workshop_id,
-        title=task_payload.get("title", "Workshop Task"), # Use title from payload
-        prompt=json.dumps(task_payload), # Store the whole payload for potential future use
-        duration=duration_seconds,
-        status="running", # Set status immediately
-        started_at=datetime.utcnow()
-    )
-    db.session.add(task)
-    
-    # --- Update Workshop Index ---
-    # Only update if we successfully used an item from the plan
-    if action_plan_items and 0 <= next_index < len(action_plan_items):
-         workshop.current_action_plan_index = next_index
+    try:
+        task = BrainstormTask(
+            workshop_id=workshop_id,
+            title=task_payload.get("title", "Workshop Task"),
+            prompt=json.dumps(task_payload), # Store full payload
+            duration=duration_seconds,
+            status="running",
+            started_at=datetime.utcnow()
+        )
+        db.session.add(task)
+        db.session.flush() # Get ID
 
-    db.session.commit() # Commit both task and workshop update
+        # Update workshop state
+        workshop.current_task_id = task.id
+        workshop.timer_start_time = task.started_at
+        workshop.timer_paused_at = None
+        workshop.timer_elapsed_before_pause = 0
+        if action_plan_items and 0 <= next_index < len(action_plan_items):
+             workshop.current_task_index = next_index # Update index only if using plan
 
-    # --- Broadcast Task ---
-    socketio.emit("task_ready", {
-        "task_id":   task.id,
-        "title":     task_payload.get("title", task.title),
-        "description": task_payload.get("task_description", "No description provided."),
-        "instructions": task_payload.get("instructions", "Submit your ideas."),
-        "duration":  task.duration # Send the calculated duration in seconds
-    }, room=f"workshop_room_{workshop_id}")
+        db.session.commit()
 
-    return jsonify({"success": True}), 200
+        # --- Broadcast Task ---
+        emit_task_ready(f"workshop_room_{workshop_id}", { # Use helper
+            "task_id":   task.id,
+            "title":     task_payload.get("title", task.title),
+            "description": task_payload.get("task_description", "No description."),
+            "instructions": task_payload.get("instructions", "Submit ideas."),
+            "duration":  task.duration
+        })
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error saving/starting next task for {workshop_id}: {e}", exc_info=True)
+        return jsonify(success=False, message="Error starting next task."), 500
 
 
 
 
 
-# --- FIX: Corrected submit_idea route ---
 @workshop_bp.route("/<int:workshop_id>/submit_idea", methods=["POST"])
 @login_required
 def submit_idea(workshop_id):
     data = request.get_json()
-    if not data:
-        return jsonify(success=False, message="Invalid request body."), 400
+    if not data: return jsonify(success=False, message="Invalid request."), 400
 
     task_id = data.get("task_id")
     content = data.get("content", "").strip()
-    # llm_output = data.get("llm_output", "").strip() # Keep if needed for other logic
 
-    # --- Validation ---
-    if not task_id:
-        return jsonify(success=False, message="Task ID is required."), 400
-    if not content:
-        return jsonify(success=False, message="Idea content cannot be empty."), 400
+    if not task_id: return jsonify(success=False, message="Task ID required."), 400
+    if not content: return jsonify(success=False, message="Idea content required."), 400
 
-    # --- Get Participant ---
-    # Use current_user directly, assuming WorkshopParticipant link isn't strictly needed here
-    # If you need the WorkshopParticipant ID, query it:
+    workshop = Workshop.query.get(workshop_id) # Get workshop to check current task and timer
+    if not workshop: return jsonify(success=False, message="Workshop not found."), 404
+
     participant_record = WorkshopParticipant.query.filter_by(
          workshop_id=workshop_id, user_id=current_user.user_id
     ).first()
-    if not participant_record:
-         return jsonify(success=False, message="You are not an active participant in this workshop."), 403
+    if not participant_record: return jsonify(success=False, message="Not a participant."), 403
 
-    # --- Check if Task Exists (using correct model) ---
-    task = BrainstormTask.query.filter_by(id=task_id, workshop_id=workshop_id).first()
-    if not task:
-        # Don't create a task here, it should already exist from begin_intro or next_task
-        current_app.logger.error(f"Attempted to submit idea for non-existent or wrong workshop task_id {task_id} in workshop {workshop_id}")
-        return jsonify(success=False, message="Invalid or inactive task specified."), 404
+    # --- Validation: Check against current task and timer ---
+    if workshop.current_task_id != task_id:
+        return jsonify(success=False, message="Cannot submit to inactive task."), 400
 
-    # --- Check if Task is Running (Optional but good) ---
-    # if task.status != 'running':
-    #     return jsonify(success=False, message="This task is no longer active."), 400
+    # Check if timer is still running for the current task
+    remaining_time = workshop.get_remaining_task_time()
+    if remaining_time <= 0 and workshop.status == 'inprogress': # Allow submission if paused
+         return jsonify(success=False, message="Time for this task has expired."), 400
+    # -------------------------------------------------------
 
-    # --- Save the submitted idea (using correct model) ---
+    task = BrainstormTask.query.get(task_id) # Task should exist if it's the current one
+    if not task: return jsonify(success=False, message="Task not found."), 404 # Should not happen
+
     try:
-        idea = BrainstormIdea( # Use BrainstormIdea model
+        idea = BrainstormIdea(
             task_id=task.id,
-            participant_id=participant_record.id, # Use the WorkshopParticipant ID
+            participant_id=participant_record.id,
             content=content,
-            # workshop_id=workshop_id, # workshop_id is implicitly linked via task/participant
             timestamp=datetime.utcnow()
         )
         db.session.add(idea)
         db.session.commit()
 
-        # --- Emit to Socket ---
         user_display_name = current_user.first_name or current_user.email.split('@')[0]
-        socketio.emit("new_idea", {
+        socketio.emit("new_idea", { # Changed event name to match JS
             "user": user_display_name,
             "content": content,
             "idea_id": idea.id,
-            "task_id": task.id # Include task_id if needed on frontend
+            "task_id": task.id
         }, room=f"workshop_room_{workshop_id}")
 
-        return jsonify(success=True, idea_id=idea.id), 200 # Return 200 OK
+        return jsonify(success=True, idea_id=idea.id), 200
 
     except Exception as e:
         db.session.rollback()
@@ -2110,4 +1989,39 @@ def submit_idea(workshop_id):
         return jsonify(success=False, message="Error saving idea."), 500
 
 
+@workshop_bp.route("/<int:workshop_id>/beacon_leave", methods=['POST'])
+def beacon_leave(workshop_id):
+    """Handles leave notification via navigator.sendBeacon."""
+    # Use try-except as request might be incomplete on browser close
+    try:
+        data = request.get_json(silent=True) or {}
+        user_id = data.get('user_id')
+        room = data.get('room') # e.g., workshop_room_123
 
+        if user_id and room and room == f"workshop_room_{workshop_id}":
+            current_app.logger.info(f"[Beacon] Received leave notification for user {user_id} from room {room}")
+
+            # --- Simulate disconnect logic ---
+            # Find SIDs associated with this user in this room
+            sids_to_remove = [sid for sid, info in _sid_registry.items() if info.get("workshop_id") == workshop_id and info.get("user_id") == user_id]
+
+            if sids_to_remove:
+                 _room_presence[room].discard(user_id)
+                 for sid in sids_to_remove:
+                     _sid_registry.pop(sid, None)
+                 current_app.logger.info(f"[Beacon] Cleaned up presence for user {user_id} in room {room}")
+                 # Broadcast update if room still active
+                 if room in _room_presence and _room_presence[room]:
+                     _broadcast_participant_list(room, workshop_id)
+                 elif room in _room_presence:
+                     del _room_presence[room]
+            # --- End Simulate disconnect ---
+
+        else:
+             current_app.logger.warning(f"[Beacon] Received invalid leave data for workshop {workshop_id}: {data}")
+
+    except Exception as e:
+        current_app.logger.error(f"[Beacon] Error processing leave beacon for workshop {workshop_id}: {e}")
+
+    # Beacon expects a 2xx response, often 204 No Content
+    return '', 204

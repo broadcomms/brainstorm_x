@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from flask_login import UserMixin
 from .extensions import db
 import secrets # Added for participants token
+import json # Added for whiteboard content
 
 
 # ---------------- User Model ----------------
@@ -156,21 +157,71 @@ class Workshop(db.Model):
     icebreaker = db.Column(db.Text, nullable=True) # JSON or text representation of generated icebreaker
     tip = db.Column(db.Text, nullable=True) # JSON or text representation of generated tips
     
-    task_sequence = db.Column(db.Text, nullable=True) 
-    current_task_index = db.Column(db.Integer, nullable=True, default=None)
-    
+    # --- MODIFIED/ADDED FOR PERSISTENCE ---
+    # Link to the currently active task
+    current_task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=True)
+
+    # Timer state tracking
+    timer_start_time = db.Column(db.DateTime, nullable=True) # When the current active period started (start or resume)
+    timer_paused_at = db.Column(db.DateTime, nullable=True) # Timestamp of the last pause
+    timer_elapsed_before_pause = db.Column(db.Integer, default=0) # Seconds elapsed before the last pause
+
+    # Store the sequence of tasks (e.g., from action plan) - Keep this if used for task generation
+    task_sequence = db.Column(db.Text, nullable=True)
+    current_task_index = db.Column(db.Integer, nullable=True, default=None) # Index within task_sequence
+
+    # Whiteboard content (optional, alternative is querying ideas)
+    # whiteboard_content = db.Column(db.Text, nullable=True) # Example: Store as JSON string
+    # --- END MODIFIED/ADDED FOR PERSISTENCE ---
+
     # Relationships
-    tasks = db.relationship("WorkshopTask", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic')
+    tasks = db.relationship(
+        "BrainstormTask",
+        back_populates="workshop",
+        cascade="all, delete-orphan",
+        lazy='dynamic',
+        # Explicitly state the foreign key column(s) in the *child* table (BrainstormTask)
+        # that link back to *this* parent table (Workshop).
+        foreign_keys="BrainstormTask.workshop_id"
+    )
     workspace = db.relationship("Workspace", back_populates="workshops")
     creator = db.relationship("User", back_populates="created_workshops", foreign_keys=[created_by_id])
     participants = db.relationship("WorkshopParticipant", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic')
     linked_documents = db.relationship("WorkshopDocument", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic')
+    chat_messages = db.relationship("ChatMessage", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic', order_by="ChatMessage.timestamp")
+
+    # Relationship to the current task object
+    current_task = db.relationship("BrainstormTask", foreign_keys=[current_task_id], post_update=True) # Removed remote_side for simplicity if not strictly needed
 
     # Helper property to get the organizer
     @property
     def organizer(self):
-        organizer_participant = self.participants.filter_by(role='organizer').first()
-        return organizer_participant.user if organizer_participant else None
+        # Assuming organizer is always the creator for simplicity now
+        return self.creator
+        # Alternative if using role:
+        # organizer_participant = self.participants.filter_by(role='organizer').first()
+        # return organizer_participant.user if organizer_participant else None
+
+    # --- ADDED: Helper to get remaining time ---
+    def get_remaining_task_time(self) -> int:
+        """Calculates remaining seconds for the current task, returns 0 if no task/timer."""
+        if not self.current_task or not self.current_task.duration:
+            return 0
+
+        if self.status == 'paused' and self.timer_paused_at:
+            # If paused, remaining time is total duration minus what elapsed before pause
+            total_elapsed = self.timer_elapsed_before_pause
+        elif self.status == 'inprogress' and self.timer_start_time:
+            # If running, calculate elapsed time in current run + time before pause
+            elapsed_this_run = (datetime.utcnow() - self.timer_start_time).total_seconds()
+            total_elapsed = self.timer_elapsed_before_pause + elapsed_this_run
+        else:
+            # No timer running or invalid state
+            return 0
+
+        remaining = self.current_task.duration - total_elapsed
+        return max(0, int(remaining)) # Return non-negative integer
+
 
 
 # ---------------- Workshop Participant Model ----------------
@@ -186,7 +237,7 @@ class WorkshopParticipant(db.Model):
     joined_timestamp = db.Column(db.DateTime, nullable=True) # When they accepted
 
     # Relationships
-    submitted_ideas = db.relationship("SubmittedIdea", back_populates="participant", cascade="all, delete-orphan", lazy='dynamic')
+    # submitted_ideas = db.relationship("SubmittedIdea", back_populates="participant", cascade="all, delete-orphan", lazy='dynamic')
     workshop = db.relationship("Workshop", back_populates="participants")
     user = db.relationship("User", back_populates="workshop_participations")
 
@@ -220,22 +271,24 @@ class WorkshopDocument(db.Model):
 # ---------------- BrainstormTask Model ---------------------------
 class BrainstormTask(db.Model):
     __tablename__ = "brainstorm_tasks"
-    
+
     # Task details
     id = db.Column(db.Integer, primary_key=True)
     workshop_id = db.Column(db.Integer, db.ForeignKey("workshops.id"), nullable=False)
     title = db.Column(db.String(255), nullable=False)            # e.g. "Introduction"
-    prompt = db.Column(db.Text, nullable=True)                   # The LLM’s generated text/instructions/question
-    
-    #Timer
+    prompt = db.Column(db.Text, nullable=True)                   # The LLM’s generated text/instructions/question OR full JSON payload
+
+    # Timer
     duration = db.Column(db.Integer, nullable=False)             # The task duration in seconds
-    status = db.Column(db.String(50), default="pending")         # STATUS: 'pending', 'running','completed'
+    status = db.Column(db.String(50), default="pending")         # STATUS: 'pending', 'running','completed', 'skipped'
     started_at = db.Column(db.DateTime, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
-    
+
     # Relationship
+    workshop = db.relationship("Workshop", back_populates="tasks", foreign_keys=[workshop_id]) # Explicit FK here too for clarity, matching Workshop.tasks
     ideas = db.relationship("BrainstormIdea", back_populates="task",
-                            cascade="all, delete-orphan", lazy="dynamic")
+                            cascade="all, delete-orphan", lazy="dynamic", order_by="BrainstormIdea.timestamp")
+
 
 
 # ---------------- BrainstormIdea Model ---------------------------
@@ -248,84 +301,85 @@ class BrainstormIdea(db.Model):
     content = db.Column(db.Text, nullable=False)
     votes = db.relationship("IdeaVote", back_populates="idea", cascade="all, delete-orphan", lazy='dynamic')
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    feasibility_report = db.Column(db.Text, nullable=True) # Stores the generated feasibility report content
+    # feasibility_report = db.Column(db.Text, nullable=True) # Stores the generated feasibility report content
+    # Add back later
     
     # Relationships
     task = db.relationship("BrainstormTask", back_populates="ideas")
     participant = db.relationship("WorkshopParticipant")
     
-    # Add to BrainstormIdea
+    # Remove Idea
     cluster_id = db.Column(db.Integer, db.ForeignKey("idea_clusters.id"), nullable=True)
     cluster = db.relationship("IdeaCluster", back_populates="ideas")
     
+    # ... (Remove IdeaCluster, IdeaVote, ActivityLog, SubmittedIdea, WorkshopTask if not used for core persistence) ...
+    # Keep ChatMessage as it's part of the persistence requirement
+    
 
-# ------------------- IdeaCluster Model --------------------------
+# --- ADDED IdeaCluster model definition based on previous context ---
 class IdeaCluster(db.Model):
-    """
-        This allow grouping ideas into clusters for voting and prioritization
-    """
     __tablename__ = "idea_clusters"
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=False)
     name = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    ideas = db.relationship("BrainstormIdea", back_populates="cluster")
+    # Relationships
+    ideas = db.relationship("BrainstormIdea", back_populates="cluster", lazy='dynamic')
 
 
 
-
-# -------------- IdeaVote Model ----------------------------------
+# --- ADDED IdeaVote model definition based on previous context ---
 class IdeaVote(db.Model):
     __tablename__ = "idea_votes"
     id = db.Column(db.Integer, primary_key=True)
     idea_id = db.Column(db.Integer, db.ForeignKey("brainstorm_ideas.id"), nullable=False)
     participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=False)
-    votes = db.Column(db.Integer, default=1)  # Vote limits (default=1)
+    votes = db.Column(db.Integer, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __table_args__ = (db.UniqueConstraint('idea_id', 'participant_id', name='_idea_participant_uc'),)
 
     # Relationships
     idea = db.relationship("BrainstormIdea", back_populates="votes")
     participant = db.relationship("WorkshopParticipant")
+    # logs = db.relationship("ActivityLog", back_populates="vote", cascade="all, delete-orphan", lazy='dynamic') # If ActivityLog exists
 
 
-# ---------------- ActivityLog ------------------------------------
-    """
-        This supports analytics, moderation and nudging logic
-        like idea count, inactivity trigger
-    """
+# --- ADDED ActivityLog model definition based on previous context ---
 class ActivityLog(db.Model):
+    __tablename__ = "activity_logs"
     id = db.Column(db.Integer, primary_key=True)
-    participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"))
-    action = db.Column(db.String(100))  # e.g., "idea_submitted", "vote_cast", "chat_message"
+    participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=True)
+    idea_id = db.Column(db.Integer, db.ForeignKey("brainstorm_ideas.id"), nullable=True)
+    vote_id = db.Column(db.Integer, db.ForeignKey("idea_votes.id"), nullable=True)
+    action = db.Column(db.String(100), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # --------------- Submitted Idea Model --------------------------
-class SubmittedIdea(db.Model):
-    __tablename__ = "submitted_ideas"
-    
+
+    # Relationships (Assuming related models have back_populates='logs')
+    participant = db.relationship("WorkshopParticipant") # Add back_populates="logs" in WorkshopParticipant if needed
+    task        = db.relationship("BrainstormTask") # Add back_populates="logs" in BrainstormTask if needed
+    idea        = db.relationship("BrainstormIdea") # Add back_populates="logs" in BrainstormIdea if needed
+    vote        = db.relationship("IdeaVote") # Add back_populates="logs" in IdeaVote if needed
+
+   
+
+
+# ---------------- ChatMessage Model ---------------------------
+class ChatMessage(db.Model):
+    __tablename__ = "chat_messages"
+
     id = db.Column(db.Integer, primary_key=True)
-    participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=False)
     workshop_id = db.Column(db.Integer, db.ForeignKey("workshops.id"), nullable=False)
-    content = db.Column(db.Text, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
+    username = db.Column(db.String(100), nullable=False)
+    message = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    cluster_id = db.Column(db.Integer, nullable=True)  # Can be null, used in a different stage
-    task_id = db.Column(db.Integer, db.ForeignKey("workshop_tasks.id"), nullable=False)
+
+    # Relationships
+    workshop = db.relationship("Workshop", back_populates="chat_messages")
+    user = db.relationship("User")
     
-    participant = db.relationship("WorkshopParticipant", back_populates="submitted_ideas")
-    task = db.relationship("WorkshopTask", back_populates="submitted_ideas")
-    
-# ---------------- Workshop Task Model ---------------------------
-class WorkshopTask(db.Model):
-    __tablename__ = "workshop_tasks"
-    
-    id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.Text, nullable=False)
-    workshop_id = db.Column(db.Integer, db.ForeignKey("workshops.id"), nullable=False)
-    task_type = db.Column(db.String(50), nullable=False)
-    status = db.Column(db.String(50), default="active")  # active or complete
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    task_sequence = db.Column(db.Integer, nullable=False)
-    
-    workshop = db.relationship("Workshop", back_populates="tasks")
-    submitted_ideas = db.relationship("SubmittedIdea", back_populates="task", cascade="all, delete-orphan", lazy='dynamic')
+
