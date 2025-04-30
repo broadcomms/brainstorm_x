@@ -160,6 +160,7 @@ class Workshop(db.Model):
     current_task_index = db.Column(db.Integer, nullable=True, default=None)
     
     # Relationships
+    tasks = db.relationship("WorkshopTask", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic')
     workspace = db.relationship("Workspace", back_populates="workshops")
     creator = db.relationship("User", back_populates="created_workshops", foreign_keys=[created_by_id])
     participants = db.relationship("WorkshopParticipant", back_populates="workshop", cascade="all, delete-orphan", lazy='dynamic')
@@ -185,6 +186,7 @@ class WorkshopParticipant(db.Model):
     joined_timestamp = db.Column(db.DateTime, nullable=True) # When they accepted
 
     # Relationships
+    submitted_ideas = db.relationship("SubmittedIdea", back_populates="participant", cascade="all, delete-orphan", lazy='dynamic')
     workshop = db.relationship("Workshop", back_populates="participants")
     user = db.relationship("User", back_populates="workshop_participations")
 
@@ -297,3 +299,33 @@ class ActivityLog(db.Model):
     participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"))
     action = db.Column(db.String(100))  # e.g., "idea_submitted", "vote_cast", "chat_message"
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # --------------- Submitted Idea Model --------------------------
+class SubmittedIdea(db.Model):
+    __tablename__ = "submitted_ideas"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=False)
+    workshop_id = db.Column(db.Integer, db.ForeignKey("workshops.id"), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    cluster_id = db.Column(db.Integer, nullable=True)  # Can be null, used in a different stage
+    task_id = db.Column(db.Integer, db.ForeignKey("workshop_tasks.id"), nullable=False)
+    
+    participant = db.relationship("WorkshopParticipant", back_populates="submitted_ideas")
+    task = db.relationship("WorkshopTask", back_populates="submitted_ideas")
+    
+# ---------------- Workshop Task Model ---------------------------
+class WorkshopTask(db.Model):
+    __tablename__ = "workshop_tasks"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.Text, nullable=False)
+    workshop_id = db.Column(db.Integer, db.ForeignKey("workshops.id"), nullable=False)
+    task_type = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(50), default="active")  # active or complete
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    task_sequence = db.Column(db.Integer, nullable=False)
+    
+    workshop = db.relationship("Workshop", back_populates="tasks")
+    submitted_ideas = db.relationship("SubmittedIdea", back_populates="task", cascade="all, delete-orphan", lazy='dynamic')

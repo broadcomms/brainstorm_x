@@ -15,6 +15,7 @@ from markupsafe import escape
 from flask_login import login_required, current_user
 import markdown # Import markdown
 
+
 # --- Socket.IO Room Join/Leave Handlers ---
 from flask_socketio import join_room, leave_room
 
@@ -1875,8 +1876,43 @@ def begin_intro(workshop_id):
         return jsonify(success=False, message=err_msg), code
 
     payload = result  # the dict from the LLM JSON
-    socketio.emit('introduction_start', payload, room=f'workshop_room_{workshop.id}')
-    return jsonify(success=True)
+# --- FIX: Create a BrainstormTask for the Introduction ---
+    try:
+        # Extract duration, default to 60 if missing or invalid
+        try:
+            duration_seconds = int(payload.get("task_duration", 60))
+        except (ValueError, TypeError):
+            duration_seconds = 60
+            current_app.logger.warning(f"Invalid or missing task_duration in intro payload for workshop {workshop_id}, defaulting to 60s.")
+
+        intro_task = BrainstormTask(
+            workshop_id=workshop_id,
+            # Use a consistent title or derive from payload
+            title=payload.get("title", "Introduction & Warm-up"),
+            # Store the specific warm-up question/task as the prompt
+            prompt=payload.get("task", "Warm-up activity"),
+            duration=duration_seconds,
+            status="running", # Start it immediately
+            started_at=datetime.utcnow()
+            # You might want to store the full payload in prompt if needed later:
+            # prompt=json.dumps(payload)
+        )
+        db.session.add(intro_task)
+        db.session.commit() # Commit to get the ID
+
+        # --- FIX: Add the new task_id to the payload ---
+        payload['task_id'] = intro_task.id
+        current_app.logger.info(f"Created introduction task {intro_task.id} for workshop {workshop_id}")
+
+        # Emit the *modified* payload including the task_id
+        socketio.emit('introduction_start', payload, room=f'workshop_room_{workshop.id}')
+        return jsonify(success=True)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creating introduction task for workshop {workshop_id}: {e}", exc_info=True)
+        return jsonify(success=False, message="Error creating introduction task."), 500
+    # --- End Fix ---
 
 
 
@@ -2007,27 +2043,71 @@ def next_task(workshop_id):
 
 
 
-
-# --- Submit Idea --- TODO: NOT DISPLAYING ON UI
+# --- FIX: Corrected submit_idea route ---
 @workshop_bp.route("/<int:workshop_id>/submit_idea", methods=["POST"])
 @login_required
 def submit_idea(workshop_id):
-    task_id = request.json.get("task_id")
-    content = request.json.get("content","").strip()
-    participant = WorkshopParticipant.query.filter_by(
-        workshop_id=workshop_id, user_id=current_user.user_id
-    ).first_or_404()
+    data = request.get_json()
+    if not data:
+        return jsonify(success=False, message="Invalid request body."), 400
 
-    idea = BrainstormIdea(task_id=task_id, participant_id=participant.id, content=content)
-    db.session.add(idea)
-    db.session.commit()
+    task_id = data.get("task_id")
+    content = data.get("content", "").strip()
+    # llm_output = data.get("llm_output", "").strip() # Keep if needed for other logic
 
-    socketio.emit("new_idea", {
-        "user": current_user.first_name or current_user.email,
-        "content": content,
-        "idea_id": idea.id
-    }, room=f"workshop_room_{workshop_id}")
-    return jsonify(success=True), 200
+    # --- Validation ---
+    if not task_id:
+        return jsonify(success=False, message="Task ID is required."), 400
+    if not content:
+        return jsonify(success=False, message="Idea content cannot be empty."), 400
+
+    # --- Get Participant ---
+    # Use current_user directly, assuming WorkshopParticipant link isn't strictly needed here
+    # If you need the WorkshopParticipant ID, query it:
+    participant_record = WorkshopParticipant.query.filter_by(
+         workshop_id=workshop_id, user_id=current_user.user_id
+    ).first()
+    if not participant_record:
+         return jsonify(success=False, message="You are not an active participant in this workshop."), 403
+
+    # --- Check if Task Exists (using correct model) ---
+    task = BrainstormTask.query.filter_by(id=task_id, workshop_id=workshop_id).first()
+    if not task:
+        # Don't create a task here, it should already exist from begin_intro or next_task
+        current_app.logger.error(f"Attempted to submit idea for non-existent or wrong workshop task_id {task_id} in workshop {workshop_id}")
+        return jsonify(success=False, message="Invalid or inactive task specified."), 404
+
+    # --- Check if Task is Running (Optional but good) ---
+    # if task.status != 'running':
+    #     return jsonify(success=False, message="This task is no longer active."), 400
+
+    # --- Save the submitted idea (using correct model) ---
+    try:
+        idea = BrainstormIdea( # Use BrainstormIdea model
+            task_id=task.id,
+            participant_id=participant_record.id, # Use the WorkshopParticipant ID
+            content=content,
+            # workshop_id=workshop_id, # workshop_id is implicitly linked via task/participant
+            timestamp=datetime.utcnow()
+        )
+        db.session.add(idea)
+        db.session.commit()
+
+        # --- Emit to Socket ---
+        user_display_name = current_user.first_name or current_user.email.split('@')[0]
+        socketio.emit("new_idea", {
+            "user": user_display_name,
+            "content": content,
+            "idea_id": idea.id,
+            "task_id": task.id # Include task_id if needed on frontend
+        }, room=f"workshop_room_{workshop_id}")
+
+        return jsonify(success=True, idea_id=idea.id), 200 # Return 200 OK
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error saving idea for task {task_id}: {e}", exc_info=True)
+        return jsonify(success=False, message="Error saving idea."), 500
 
 
 

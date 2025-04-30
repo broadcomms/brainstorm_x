@@ -138,11 +138,85 @@
 
           <!-- IDEA INPUT FORM  -->
           <div id="idea-form-container" class="mb-3">
-            <textarea id="idea-input" class="form-control mb-2" placeholder="Enter your response here…" rows="2"
-              autocomplete="off" required></textarea>
-            <button id="idea-submit" type="submit" class="btn btn-primary w-100">
-              <i class="bi bi-send"></i> Submit
-            </button>
+            <form id="idea-form">
+              <textarea id="idea-input" class="form-control mb-2" placeholder="Enter your response here…" rows="2" autocomplete="off" required></textarea>
+              <input type="hidden" id="llm-output" name="llm_output" value=""/>  <!-- Hidden field for LLM output -->
+              <button id="idea-submit" type="submit" class="btn btn-primary w-100">
+                  <i class="bi bi-send"></i> Submit
+              </button>
+          </form>
+          <script>
+            document.getElementById('idea-form').addEventListener('submit', function(event) {
+                event.preventDefault();
+                
+                const ideaInput = document.getElementById('idea-input').value;
+                const llmOutput = document.getElementById('llm-output').value;
+                
+
+                                // --- Basic validation ---
+                                if (!ideaInput.trim()) {
+                    alert("Please enter your idea.");
+                    return;
+                }
+                if (!currentTaskId) {
+                    alert("Cannot submit idea: No active task found.");
+                    console.error("Attempted to submit idea but currentTaskId is null.");
+                    return;
+                }
+                // ------------------------
+
+                fetch(`/workshop/${workshopId}/submit_idea`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        task_id: currentTaskId,
+                        content: ideaInput,
+                        llm_output: llmOutput
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        // Try to get error message from JSON response
+                        return response.json().then(errData => {
+                            throw new Error(errData.message || `HTTP error ${response.status}`);
+                        }).catch(() => {
+                            // Fallback if response is not JSON
+                            throw new Error(`HTTP error ${response.status}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        console.log("Idea submitted successfully");
+                        // Clear the form after successful submission
+                        document.getElementById('idea-input').value = '';
+                        // Optionally provide user feedback
+                    } else {
+                        // Handle specific errors returned from the server
+                        throw new Error(data.message || "Submission failed");
+                    }
+                })
+                .catch(error => {
+                    console.error('Error submitting idea:', error);
+                    alert(`Error submitting idea: ${error.message}`);
+                });
+            });
+            </script>
+
+
+
+
+
+
+
+
+
+
+
+
           </div>
         </div>
 
