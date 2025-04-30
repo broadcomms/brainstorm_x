@@ -399,19 +399,23 @@
 
   function handleTimerEnd() {
       console.log(`Timer finished for task ${currentTaskId}`);
-      clearCountdown(); // Clear interval and reset display variables
-      elements.timerText.textContent = '00:00'; // Explicitly set to 00:00
-      elements.progressBar.style.width = '100%'; // Show full progress
+      // clearCountdown(); // Don't clear totalDuration here
+      if (countdownInterval) {
+          clearInterval(countdownInterval);
+          countdownInterval = null;
+      }
+      elements.timerText.textContent = '00:00';
+      elements.progressBar.style.width = '100%';
 
       // Disable idea form
-      elements.ideaFormContainer.style.display = 'none';
+      elements.ideaFormContainer.style.display = 'none'; // Hide form when time is up
       elements.ideaSubmitBtn.disabled = true;
       elements.ideaInput.disabled = true;
 
       // Enable "Next Task" button for organizer
       if (isOrganizer && elements.nextTaskBtn) {
-          elements.nextTaskBtn.disabled = false;
-          elements.nextTaskBtn.innerHTML = 'Next Task'; // Ensure text is correct
+          elements.nextTaskBtn.disabled = false; // <<<< ENSURE THIS IS ENABLED
+          elements.nextTaskBtn.innerHTML = 'Next Task';
       }
   }
 
@@ -423,21 +427,35 @@
         return;
     }
     currentTaskId = data.task_id;
-    // IMPORTANT: Update totalDurationForCurrentTask here
     totalDurationForCurrentTask = parseInt(data.duration, 10) || 0;
     console.log(`Set totalDurationForCurrentTask to: ${totalDurationForCurrentTask}`);
 
+    // --- Clear Whiteboard ---
+    if (elements.stickyBoard) {
+        elements.stickyBoard.innerHTML = ''; // Clear previous notes
+        // Re-add placeholder initially, it will be hidden if whiteboard_sync brings ideas
+        elements.stickyBoard.innerHTML = `
+            <p id="idea-placeholder" class="text-muted small fst-italic w-100 text-center mt-3">
+                Ideas will appear here...
+            </p>`;
+        elements.ideaPlaceholder = document.getElementById('idea-placeholder'); // Re-select placeholder
+    } else {
+        console.error("Sticky board element not found!");
+    }
+    // --- End Clear Whiteboard ---
 
     elements.taskPlaceholder.style.display = 'none';
     elements.taskContent.style.display = 'block';
 
-    // Current Task Title
+    // --- Update AI Facilitator Area ---
     elements.taskTitle.textContent = data.title || "Workshop Task";
 
-    // Build description HTML based on task type
+    // Build description HTML based on task type (intro vs. regular)
     let descriptionHtml = '';
-    if (data.welcome && data.goals && data.rules && data.task) { // Intro task
-        
+
+    // Check if it looks like an intro task payload (adjust keys if needed)
+    if (data.welcome && data.goals && data.rules && data.task) {
+        // Format for welcome and introduction task
         descriptionHtml = `
               <hr>
               <p class="mb-2"> ${data.welcome}</p>
@@ -453,33 +471,50 @@
               `
 
     } else { // Subsequent task
-        descriptionHtml = `Next Task`; // (Keep the HTML structure from previous version)
+     // Format for Regular Brainstorming Task
+     descriptionHtml = `
+            <p class="fs-5 mb-2">${data.description || "Please brainstorm on the following topic."}</p>
+            <p class="mb-1"><strong>Instructions:</strong></p>
+            <p>${data.instructions || "Submit your ideas individually using the input field below."}</p>
+        `;
+         // Optionally display task_type if needed:
+         descriptionHtml += `<p class="small text-muted">Task Type: ${data.task_type || 'N/A'}</p>`;
     }
     elements.taskDescription.innerHTML = descriptionHtml;
+    // --- End Update AI Facilitator Area ---
 
 
 
 
-
-    // Show and enable/disable idea form based on workshop status
+    // --- Show and Enable Idea Form ---
     const isPaused = workshopStatus === 'paused';
     elements.ideaFormContainer.style.display = 'block';
-    elements.ideaInput.value = '';
+    elements.ideaInput.value = ''; // Clear previous input
     elements.ideaSubmitBtn.disabled = isPaused;
     elements.ideaInput.disabled = isPaused;
+    // --- End Show and Enable Idea Form ---
+
+
 
     // Clear previous ideas from whiteboard
     elements.stickyBoard.innerHTML = '';
     elements.ideaPlaceholder.style.display = 'none';
 
-    // Disable "Next Task" button until timer finishes
-    if (isOrganizer && elements.nextTaskBtn) {
-      elements.nextTaskBtn.disabled = true;
+    // --- Manage Organizer Buttons ---
+    if (isOrganizer) {
+        // Disable "Next Task" button until timer finishes
+        if (elements.nextTaskBtn) {
+            elements.nextTaskBtn.disabled = true;
+            elements.nextTaskBtn.style.display = 'inline-block'; // Ensure it's visible
+        }
+        // Hide "Begin Workshop" button if it exists
+        if (elements.beginIntroForm) {
+            elements.beginIntroForm.style.display = 'none';
+        }
     }
-    // Hide "Begin Workshop" button
-    if (elements.beginIntroForm) {
-        elements.beginIntroForm.style.display = 'none';
-    }
+    // --- End Manage Organizer Buttons ---
+
+
 
     // Start countdown with the FULL duration initially.
     // The 'timer_sync' event will correct this immediately if rejoining mid-task.
@@ -578,45 +613,43 @@
   socket.on('introduction_start', (data) => {
       if (data.task_id) {
           console.log("Received introduction_start:", data);
-          displayTask(data); // This now sets totalDurationForCurrentTask
-      } else { /* (Keep error log) */ }
+          displayTask(data);
+      } else { console.error("Received introduction_start without task_id:", data); }
   });
   socket.on('task_ready', (data) => {
       if (data.task_id) {
           console.log("Received task_ready:", data);
-          displayTask(data); // This now sets totalDurationForCurrentTask
-      } else { /* (Keep error log) */ }
+          displayTask(data); // Call displayTask for the new task
+      } else { console.error("Received task_ready without task_id:", data); }
   });
 
-  // Timer synchronization
   socket.on('timer_sync', (data) => {
-      // Ensure sync is for the currently displayed task
       if (data.task_id === currentTaskId) {
           console.log("Received timer_sync:", data);
-          // Pass BOTH remaining seconds AND the total duration stored locally
+          // Use totalDurationForCurrentTask stored locally when task started/displayed
           startOrSyncCountdown(data.remaining_seconds, totalDurationForCurrentTask);
       } else {
           console.log("Ignoring timer_sync for different/old task:", data.task_id, "current:", currentTaskId);
       }
   });
 
-  // Whiteboard synchronization
   socket.on('whiteboard_sync', (data) => {
       console.log("Received whiteboard_sync:", data);
       if (!elements.stickyBoard) return;
       elements.stickyBoard.innerHTML = ''; // Clear board first
       if (data.ideas && data.ideas.length > 0) {
-          elements.ideaPlaceholder.style.display = 'none';
-          data.ideas.forEach(idea => addStickyNote(idea)); // Add each idea
+          // Ensure placeholder exists before trying to hide it
+          const placeholder = document.getElementById('idea-placeholder');
+          if(placeholder) placeholder.style.display = 'none';
+          data.ideas.forEach(idea => addStickyNote(idea));
       } else {
-          // Show placeholder only if a task is active but no ideas yet
-          elements.ideaPlaceholder.style.display = currentTaskId ? 'block' : 'none';
+          // Ensure placeholder exists before trying to show it
+          const placeholder = document.getElementById('idea-placeholder');
+          if(placeholder) placeholder.style.display = currentTaskId ? 'block' : 'none'; // Show only if a task is active
       }
   });
 
-  // New idea event
   socket.on('new_idea', data => {
-    // Add idea only if it belongs to the current task
     if (data.task_id === currentTaskId) {
         console.log('New idea received:', data);
         addStickyNote(data);
@@ -757,125 +790,139 @@
       
 
     // Next Task Button (Organizer only)
-    if (elements.nextTaskBtn) { /* (Keep as is) */ }
+ // --- Next Task Button Listener ---
+ if (elements.nextTaskBtn) {
+          elements.nextTaskBtn.addEventListener('click', async () => {
+              console.log("Next Task button clicked.");
+              if (!isOrganizer) return; // Should be disabled anyway, but double-check
+
+              elements.nextTaskBtn.disabled = true;
+              elements.nextTaskBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+
+              try {
+                  const response = await fetch(`/workshop/${workshopId}/next_task`, {
+                      method: 'POST',
+                      headers: {
+                          'X-Requested-With': 'XMLHttpRequest',
+                          'Accept': 'application/json'
+                      }
+                  });
+
+                  const contentType = response.headers.get("content-type");
+                  if (response.ok && contentType && contentType.includes("application/json")) {
+                      const data = await response.json();
+                      if (data.success) {
+                          console.log("Next task request successful. Waiting for 'task_ready' event.");
+                          // SUCCESS: DO NOTHING HERE. UI updates via 'task_ready' socket event.
+                          // Button remains disabled until timer ends for the *new* task.
+                      } else {
+                           throw new Error(data.message || 'Failed to start next task (server error).');
+                      }
+                  } else if (!response.ok) {
+                      const errorText = await response.text();
+                      console.error(`HTTP error ${response.status} requesting next task: ${errorText}`);
+                      throw new Error(`HTTP error ${response.status}`);
+                  } else {
+                      console.warn("Received non-JSON success response for next_task.");
+                  }
+              } catch (err) {
+                  console.error("Next Task Error:", err);
+                  alert('Error starting next task: ' + err.message);
+                  // Re-enable button ONLY on error
+                  elements.nextTaskBtn.disabled = false;
+                  elements.nextTaskBtn.innerHTML = 'Next Task';
+              }
+              // NOTE: No 'finally' block. Button state is managed by timer end and task start.
+          });
+          console.log("Attached click listener to #next-task-btn");
+      } else if (isOrganizer) {
+          console.log("#next-task-btn not found, but expected for organizer.");
+      }
+
+
+
+      // ... (keep beforeunload listener) ...
+
+      // --- Initial UI setup ---
+      console.log("DOM Content Loaded. Initializing UI.");
+      updateWorkshopStatusUI(workshopStatus);
+      console.log(`Initial state: Task ID = ${currentTaskId}, Status = ${workshopStatus}`);
+      // The join_room logic in sockets.py should emit necessary events (task, timer, whiteboard)
+      // to populate the initial state if a task is already active.
+
 
     // Chat Form Submission
     if (elements.chatForm) { /* (Keep as is) */ }
 
-      // --- MODIFIED: Idea Submission Form ---
+      // --- Idea Submission Form Listener ---
       if (elements.ideaForm) {
           elements.ideaForm.addEventListener('submit', async (event) => {
-              console.log("Idea form submitted. Preventing default."); // Log: Check if handler runs
-              event.preventDefault(); // <-- CRITICAL: Prevent default browser submission
+              event.preventDefault(); // Prevent default form submission
 
-              const ideaContent = elements.ideaInput.value.trim(); // Get value from textarea
-
-              // --- Validations ---
-              if (!ideaContent) {
-                  alert("Please enter your idea.");
-                  return; // Stop if no content
+              const ideaContent = elements.ideaInput.value.trim();
+              if (!ideaContent || !currentTaskId || elements.ideaSubmitBtn.disabled) {
+                  console.warn("Idea submission blocked (no content, no task, or disabled).");
+                  return;
               }
-              if (!currentTaskId) {
-                  alert("Cannot submit idea: No active task found.");
-                  console.error("Attempted to submit idea but currentTaskId is null.");
-                  return; // Stop if no task ID
-              }
-              if (elements.ideaSubmitBtn.disabled) {
-                  console.warn("Idea submission attempted while button is disabled (e.g., paused or submitting).");
-                  return; // Stop if button is already disabled
-              }
-              // --- End Validations ---
 
-              console.log(`Submitting idea for task ${currentTaskId}: "${ideaContent}"`); // Log: Check data
-
-              // --- Disable button during submission ---
+              console.log(`Submitting idea for task ${currentTaskId}: "${ideaContent}"`);
               elements.ideaSubmitBtn.disabled = true;
               const originalButtonHtml = elements.ideaSubmitBtn.innerHTML;
               elements.ideaSubmitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Submitting...';
 
               try {
-                  // --- Asynchronous Fetch Request ---
                   const response = await fetch(`/workshop/${workshopId}/submit_idea`, {
                       method: 'POST',
                       headers: {
                           'Content-Type': 'application/json',
-                          'X-Requested-With': 'XMLHttpRequest', // Helps Flask detect AJAX
-                          'Accept': 'application/json'         // Indicate we prefer JSON response
+                          'X-Requested-With': 'XMLHttpRequest',
+                          'Accept': 'application/json'
                       },
                       body: JSON.stringify({
                           task_id: currentTaskId,
-                          content: ideaContent // Send the content
+                          content: ideaContent
                       })
                   });
 
-                  // --- Handle Response ---
                   const contentType = response.headers.get("content-type");
                   if (response.ok && contentType && contentType.includes("application/json")) {
                       const data = await response.json();
                       if (data.success) {
-                          console.log("Idea submitted successfully via POST. Waiting for 'new_idea' socket event.");
-                          elements.ideaInput.value = ''; // Clear input field on success
-                          // The actual display update is handled by the 'new_idea' socket event listener
+                          console.log("Idea submitted successfully via POST.");
+                          elements.ideaInput.value = ''; // Clear input
                       } else {
-                          // Server returned JSON but indicated failure
-                          throw new Error(data.message || `Idea submission failed (server error).`);
+                          throw new Error(data.message || `Idea submission failed.`);
                       }
                   } else if (!response.ok) {
-                      // Handle non-JSON errors (like 404, 500 without JSON body)
                       const errorText = await response.text();
-                      console.error(`HTTP error ${response.status} submitting idea: ${errorText}`);
-                      throw new Error(`HTTP error ${response.status}`);
+                      throw new Error(`HTTP error ${response.status}: ${errorText}`);
                   } else {
-                      // Handle unexpected success response that isn't JSON
                       console.warn("Received non-JSON success response for submit_idea.");
-                      // Still rely on socket event if backend emitted one, but log this oddity.
                   }
-                  // --- End Handle Response ---
-
               } catch (error) {
                   console.error('Error submitting idea:', error);
                   alert(`Error submitting idea: ${error.message}`);
-                  // Error occurred, re-enable button if not paused
-                  elements.ideaSubmitBtn.disabled = workshopStatus === 'paused';
-                  elements.ideaSubmitBtn.innerHTML = originalButtonHtml;
               } finally {
-                  // --- Re-enable button (unless paused) ---
-                  // This runs even after successful submission, but the button should remain enabled
-                  // unless the workshop is paused.
+                  // Re-enable button unless paused
                   if (workshopStatus !== 'paused') {
                       elements.ideaSubmitBtn.disabled = false;
                   }
-                  // Restore original button text only if it wasn't re-enabled above (e.g., if paused)
-                  if (elements.ideaSubmitBtn.disabled) {
-                       elements.ideaSubmitBtn.innerHTML = originalButtonHtml;
-                  } else {
-                       // If re-enabled, ensure spinner is gone
-                       elements.ideaSubmitBtn.innerHTML = '<i class="bi bi-send"></i> Submit';
-                  }
+                  elements.ideaSubmitBtn.innerHTML = originalButtonHtml; // Restore original text/icon
               }
           });
-          console.log("Attached submit listener to #idea-form"); // Confirm attachment
+          console.log("Attached submit listener to #idea-form");
       } else {
-          console.error("#idea-form not found on page load."); // Log if form element is missing
+          console.error("#idea-form not found on page load.");
       }
 
-    // beforeunload listener
-    window.addEventListener('beforeunload', () => { /* (Keep as is) */ });
+      // ... (keep beforeunload listener) ...
 
-    // --- Initial UI setup based on server-rendered state ---
-    console.log("DOM Content Loaded. Initializing UI.");
-    updateWorkshopStatusUI(workshopStatus); // Set initial UI based on status
-
-    // If a task was active when the page loaded (from Jinja),
-    // ensure the timer sync event (if received) correctly starts/displays the timer.
-    // The initial call to displayTask might happen *before* timer_sync is received on fast reloads.
-    // We rely on the timer_sync event handler to call startOrSyncCountdown correctly.
-    // The initial idea form visibility is handled within updateWorkshopStatusUI now.
-
-    // If there's a current task ID from the server render,
-    // fetch the task details again via socket emit or ensure timer_sync handles it.
-    // The current implementation relies on _on_join_room emitting everything needed.
-    console.log(`Initial state: Task ID = ${currentTaskId}, Status = ${workshopStatus}`);
+      // --- Initial UI setup ---
+      console.log("DOM Content Loaded. Initializing UI.");
+      updateWorkshopStatusUI(workshopStatus);
+      console.log(`Initial state: Task ID = ${currentTaskId}, Status = ${workshopStatus}`);
+      // The join_room logic in sockets.py should emit necessary events (task, timer, whiteboard)
+      // to populate the initial state if a task is already active.
 
 
   }); // End DOMContentLoaded

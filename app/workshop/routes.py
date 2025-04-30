@@ -19,8 +19,9 @@ from datetime import datetime, timedelta
 # --- Socket.IO Room Join/Leave Handlers ---
 from flask_socketio import join_room, leave_room
 
+from app.utils.json_utils import extract_json_block
 from app.extensions import socketio
-
+from app.service.routes.task import get_next_task_payload
 @socketio.on('join_room')
 @login_required
 def handle_join_room(data):
@@ -1513,23 +1514,7 @@ def edit_action_plan(workshop_id):
         return jsonify({"success": False, "message": "Server error saving edit."}), 500
 
 
-# --- Add extract_json_block if it's not already imported/defined ---
-# (Copied from app/agent/routes.py for completeness if needed here)
-def extract_json_block(text):
-    """
-    Extract JSON object/array from a Markdown-style fenced LLM output block.
-    Handles both objects {} and arrays [].
-    """
-    # Try matching array first
-    match = re.search(r"```json\s*(\[.*?\])\s*```", text, re.DOTALL)
-    if match:
-        return match.group(1)
-    # Try matching object
-    match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if match:
-        return match.group(1)
-    # Fallback: assume the whole text might be JSON, strip whitespace
-    return text.strip()
+
 
 
 
@@ -1828,25 +1813,40 @@ def next_task(workshop_id):
     if not is_organizer(workshop, current_user):
         return jsonify({"success": False, "message": "Permission denied"}), 403
 
-    # Mark previous task as completed (if any)
+    # --- Permission & Status Check ---
+    if workshop.status not in ['inprogress', 'paused']:
+         return jsonify({"success": False, "message": f"Cannot advance task when workshop status is {workshop.status}."}), 400
+    # Optional: Check if timer actually finished for the current task if required
+    # remaining_time = workshop.get_remaining_task_time()
+    # if workshop.current_task_id and remaining_time > 0 and workshop.status == 'inprogress':
+    #     return jsonify({"success": False, "message": "Current task timer has not finished."}), 400
+
+    # --- Mark previous task as completed ---
     if workshop.current_task_id:
         previous_task = BrainstormTask.query.get(workshop.current_task_id)
         if previous_task and previous_task.status == 'running':
             previous_task.status = 'completed'
             previous_task.ended_at = datetime.utcnow()
-            # No need to commit yet, will commit with new task
+            current_app.logger.info(f"Marked previous task {previous_task.id} as completed.")
+            # db.session.add(previous_task) # Add to session if needed, commit happens later
 
-    # --- Action Plan Logic (Simplified from original) ---
+    # --- Determine Next Action Plan Item ---
     action_plan_items = []
     next_action_plan_item = None
-    next_index = 0
+    next_index = 0 # Default for generic task or first task after intro
 
     if workshop.task_sequence:
         try:
+            # --- USE THE NEW UTILITY FUNCTION ---
             cleaned_json_string = extract_json_block(workshop.task_sequence)
-            action_plan_items = json.loads(cleaned_json_string)
-            if not isinstance(action_plan_items, list): action_plan_items = []
+            # -----------------------------------
+            if cleaned_json_string: # Check if extraction was successful
+                action_plan_items = json.loads(cleaned_json_string)
+                if not isinstance(action_plan_items, list): action_plan_items = []
+            else:
+                 action_plan_items = [] # Treat as empty if extraction failed
         except (json.JSONDecodeError, TypeError):
+            current_app.logger.warning(f"Could not parse action plan for workshop {workshop_id}. Raw: {workshop.task_sequence[:100]}")
             action_plan_items = []
 
     if action_plan_items:
@@ -1855,69 +1855,85 @@ def next_task(workshop_id):
 
         if 0 <= next_index < len(action_plan_items):
             next_action_plan_item = action_plan_items[next_index]
+            current_app.logger.info(f"Advancing to action plan item {next_index}: {next_action_plan_item.get('phase')}")
         else:
-            # End of plan - maybe emit event or just stop?
+            # --- End of Action Plan ---
+            current_app.logger.info(f"Action plan completed for workshop {workshop_id}.")
             socketio.emit("action_plan_complete", {"workshop_id": workshop_id}, room=f"workshop_room_{workshop_id}")
-            # Clear current task state
+            # Optionally change workshop status or just clear task state
             workshop.current_task_id = None
             workshop.timer_start_time = None
             workshop.timer_paused_at = None
             workshop.timer_elapsed_before_pause = 0
+            # workshop.status = 'completed' # Or maybe a different status like 'post_activity'
             db.session.commit()
             return jsonify({"success": True, "message": "Action plan completed."}), 200
     else:
-        # No plan, generate generic or error
+        # No plan exists or it's invalid
         current_app.logger.warning(f"No valid action plan for {workshop_id}. Generating generic task.")
         next_action_plan_item = None # Signal generic task generation
+        # Decide if you want to proceed with a generic task or return an error
+        # For now, we proceed with generic task generation
 
-    # --- Call Agent ---
-    raw_task_data = generate_next_task_text(workshop_id, action_plan_item=next_action_plan_item)
-    cleaned_raw = extract_json_block(raw_task_data)
+    # --- Call Task Service to get payload ---
+    result = get_next_task_payload(workshop_id, action_plan_item=next_action_plan_item)
 
+    # Handle potential errors from the service
+    if isinstance(result, tuple) and not isinstance(result[0], dict):
+        err_msg, code = result
+        current_app.logger.error(f"Failed to get next task payload for {workshop_id}: {err_msg} (Code: {code})")
+        return jsonify(success=False, message=err_msg), code
+
+    task_payload = result # Now we know it's a dict
+
+    # --- Persist the New Task ---
     try:
-        task_payload = json.loads(cleaned_raw)
-        if not isinstance(task_payload, dict): raise ValueError("LLM did not return a JSON object")
-    except (json.JSONDecodeError, ValueError) as e:
-        current_app.logger.error(f"Failed to parse next task JSON for {workshop_id}: {e}. Raw: {raw_task_data[:200]}")
-        return jsonify({"success": False, "message": "Invalid task format received from AI."}), 500
+        duration_seconds = task_payload.get("task_duration", 60) # Already validated in service
 
-    # --- Duration Parsing ---
-    try:
-        duration_seconds = int(task_payload.get("task_duration", 60))
-    except (ValueError, TypeError):
-        duration_seconds = 60
-
-    # --- Persist Task ---
-    try:
         task = BrainstormTask(
             workshop_id=workshop_id,
             title=task_payload.get("title", "Workshop Task"),
-            prompt=json.dumps(task_payload), # Store full payload
+            prompt=json.dumps(task_payload), # Store full validated payload
             duration=duration_seconds,
-            status="running",
+            status="running", # Start as running
             started_at=datetime.utcnow()
         )
         db.session.add(task)
-        db.session.flush() # Get ID
+        db.session.flush() # Get the ID for the workshop record
 
-        # Update workshop state
+        # --- Update Workshop State ---
         workshop.current_task_id = task.id
         workshop.timer_start_time = task.started_at
         workshop.timer_paused_at = None
         workshop.timer_elapsed_before_pause = 0
+        # Update index only if we successfully used the action plan
         if action_plan_items and 0 <= next_index < len(action_plan_items):
-             workshop.current_task_index = next_index # Update index only if using plan
+             workshop.current_task_index = next_index
+        elif not action_plan_items:
+             # If no plan, maybe increment index anyway or set to a specific value?
+             # For now, let's just increment from previous state if possible
+             prev_index = workshop.current_task_index if workshop.current_task_index is not None else -1
+             workshop.current_task_index = prev_index + 1
+
+
+        # If workshop was paused, set it back to inprogress
+        if workshop.status == 'paused':
+            workshop.status = 'inprogress'
 
         db.session.commit()
+        current_app.logger.info(f"Started new task {task.id} for workshop {workshop_id}. Index: {workshop.current_task_index}")
 
-        # --- Broadcast Task ---
-        emit_task_ready(f"workshop_room_{workshop_id}", { # Use helper
+        # --- Broadcast Task to Clients ---
+        # Prepare payload for the 'task_ready' event
+        event_payload = {
             "task_id":   task.id,
             "title":     task_payload.get("title", task.title),
-            "description": task_payload.get("task_description", "No description."),
-            "instructions": task_payload.get("instructions", "Submit ideas."),
-            "duration":  task.duration
-        })
+            "description": task_payload.get("task_description", "No description provided."),
+            "instructions": task_payload.get("instructions", "Please submit your ideas."),
+            "duration":  task.duration,
+            "task_type": task_payload.get("task_type", "brainstorm") # Include task type
+        }
+        emit_task_ready(f"workshop_room_{workshop_id}", event_payload) # Use helper emitter
 
         return jsonify({"success": True}), 200
 
@@ -1925,7 +1941,6 @@ def next_task(workshop_id):
         db.session.rollback()
         current_app.logger.error(f"Error saving/starting next task for {workshop_id}: {e}", exc_info=True)
         return jsonify(success=False, message="Error starting next task."), 500
-
 
 
 

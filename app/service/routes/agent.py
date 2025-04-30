@@ -29,6 +29,7 @@ from concurrent.futures import ThreadPoolExecutor # TODO: ... overload if requir
 
 # --- Import aggregate_pre_workshop_data from the new utils file ---
 from app.utils.data_aggregation import aggregate_pre_workshop_data
+from app.utils.json_utils import extract_json_block
 
 agent_bp = Blueprint(   "agent_bp", 
                         __name__, 
@@ -106,6 +107,13 @@ Workshop Context:
     current_app.logger.debug(f"[Agent] Workshop raw action plan for {workshop_id}: {raw_output}")
 
     cleaned_json_string = extract_json_block(raw_output)
+    
+    # --- ADD CHECK FOR EMPTY BLOCK ---
+    if not cleaned_json_string:
+         current_app.logger.warning(f"[Agent] Could not extract valid JSON block for action plan (workshop {workshop_id}). Raw: {raw_output[:150]}...")
+         return "AGENT Could not extract valid JSON action plan."
+    # --------------------------------
+
     try:
         parsed = json.loads(cleaned_json_string)
 
@@ -119,9 +127,15 @@ Workshop Context:
 
         return validated_json
 
-    except Exception as e:
-        current_app.logger.warning(f"[Agent] Plan JSON parse error: {e}. Raw output: {raw_output[:150]}...")
-        return "AGENT Could not generate valid JSON action plan."
+    except json.JSONDecodeError as e: # Catch only JSON error here
+        current_app.logger.warning(f"[Agent] Plan JSON parse error: {e}. Block: {cleaned_json_string[:150]}...")
+        return "AGENT Could not generate valid JSON action plan (parse error)."
+    except ValueError as e: # Catch structure validation error
+         current_app.logger.warning(f"[Agent] Plan JSON structure error: {e}. Block: {cleaned_json_string[:150]}...")
+         return f"AGENT Invalid action plan structure: {e}"
+    except Exception as e: # Catch other errors
+        current_app.logger.error(f"[Agent] Unexpected error processing action plan: {e}", exc_info=True)
+        return "AGENT Unexpected error processing action plan."
 
 
 # API endpoint for action plan generation (This one likely doesn't need the force flag, as it's for initial generation)
@@ -155,28 +169,7 @@ def generate_action_plan(workshop_id):
 ### #---------------------------------------------------------
 
 # #-----------------------------------------------------------
-# # Helper function to extract json block from LLM output
-def extract_json_block_______(text):
-    """
-    Extract JSON object from a Markdown-style fenced LLM output block.
-    """
-    match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if match:
-        return match.group(1)
-    return text.strip()  # fallback if no fencing found
 
-def extract_json_block(text):
-    """
-    Extract JSON array or object from LLM output.
-    Removes markdown-style ```json blocks if present.
-    """
-    array_match = re.search(r"\[.*\]", text, re.DOTALL)
-    if array_match:
-        return array_match.group(0)
-    object_match = re.search(r"\{.*\}", text, re.DOTALL)
-    if object_match:
-        return object_match.group(0)
-    return text.strip()
 
 
 
@@ -269,53 +262,11 @@ def generate_introduction(workshop_id):
 
 
 
-##############################################################
-##############################################################
-# #-----------------------------------------------------------
-# # Remove this when new generate_next_task_text is stable
-def generate_next_task_text_____OLD(workshop_id):
-    """
-    Generates the next brainstorming task as a JSON payload,
-    optionally focusing on a specific action_plan_item.
-    """
-    pre_workshop_data = aggregate_pre_workshop_data(workshop_id)
-    if not pre_workshop_data:
-        return json.dumps({"error": "Workshop data unavailable."})
-
-    prompt_template = """
-You are the facilitator for a brainstorming workshop. Based *only* on the workshop context below,
-create the next task. Produce output as a JSON object with these keys:
-- title: A very short title for this task.
-- task_type: The type of activity (e.g., "brainstorming", "discussion").
-- task_description: The question or prompt participants should address.
-- instructions: How participants should submit ideas (e.g., “Post on sticky notes…”).
-- task_duration: The time allocated for the task in seconds. (e.g., 120 for 2 minutes).
-
-Workshop Context:
-{pre_workshop_data}
-
-Respond with *only* valid JSON.
-"""
-    watsonx = WatsonxLLM(
-        model_id="ibm/granite-3-3-8b-instruct",
-        url=Config.WATSONX_URL,
-        project_id=Config.WATSONX_PROJECT_ID,
-        apikey=Config.WATSONX_API_KEY,
-        params={
-            "decoding_method": "greedy",
-            "max_new_tokens": 200,
-            "min_new_tokens": 50,
-            "temperature": 0.7,
-        }
-    )
-    prompt = PromptTemplate.from_template(prompt_template)
-    chain = prompt | watsonx
-    raw = chain.invoke({"pre_workshop_data": pre_workshop_data})
-    return raw
 # #-----------------------------------------------------------
 ##############################################################
 ## #-----------------------------------------------------------
-# # New next task function
+# # Generate Next Task text
+# #-----------------------------------------------------------
 
 def generate_next_task_text(workshop_id, action_plan_item=None):
     """

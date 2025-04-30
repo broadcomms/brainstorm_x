@@ -2,33 +2,12 @@
 import json
 import re
 from flask import current_app
+# --- IMPORT THE NEW UTILITY ---
+from app.utils.json_utils import extract_json_block
 from app.utils.data_aggregation import aggregate_pre_workshop_data
 from app.service.routes.agent import generate_introduction_text
 
-def extract_json_block(text: str) -> str:
-    """
-    Extract a JSON array block from the raw LLM response.
-    """
-    if not text:
-        return text
 
-    # 1) Prefer an explicit ```json fenced block
-    fence = re.search(r"```json\s*([\s\S]*?)```", text, re.IGNORECASE)
-    if fence:
-        return fence.group(1).strip()
-
-    # 2) Otherwise take the first JSON object
-    obj = re.search(r"\{[\s\S]*\}", text)
-    if obj:
-        return obj.group(0).strip()
-
-    # 3) Or the first JSON array
-    arr = re.search(r"$begin:math:display$[\\s\\S]*$end:math:display$", text)
-    if arr:
-        return arr.group(0).strip()
-
-    # 4) Give up – maybe it’s already raw JSON
-    return text.strip()
 
 
 
