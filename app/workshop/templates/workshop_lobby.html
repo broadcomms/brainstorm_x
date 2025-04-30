@@ -106,7 +106,7 @@
             <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2" id="participant-{{ p.user_id }}"> {# Add ID #}
               <span class="d-flex align-items-center gap-2 flex-grow-1">
                 <img src="{{ url_for('static', filename='images/default-profile.png') }}" alt="pic" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;">
-                {{ p.user.first_name or p.user.email }}
+                {{ p.user.first_name }} {{ p.user.last_name }} 
                 {% if p.role == 'organizer' or p.user_id == workshop.created_by_id %}<span class="badge bg-primary">Organizer</span>{% endif %}
               </span>
               <span class="badge bg-secondary" id="status-{{ p.user_id }}">Waiting</span>
@@ -158,7 +158,7 @@
   const userId = {{ current_user.user_id }};
   const isOrganizer = {{ user_is_organizer | tojson }}; // Pass boolean to JS
   const lobbyRoom = `workshop_lobby_${workshopId}`;
-  const defaultProfilePicUrl = "{{ url_for('static', filename='images/default-profile.png') }}";
+  
   // --- Socket.IO Setup ---
   const socket = io(); // Assuming connection is established in base.html
 
@@ -455,6 +455,7 @@
   }
 
   function handleParticipantListUpdate(data) {
+    
       console.log('Participant list update received:', data);
       if (data.workshop_id === workshopId) {
           const listElement = document.getElementById('participant-list');
@@ -463,17 +464,19 @@
 
           listElement.innerHTML = ''; // Clear existing list
           data.participants.forEach(p => {
+            const defaultProfilePicUrl = "{{ url_for('static', filename='images/default-profile.png') }}";
               const li = document.createElement('li');
               li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2';
               li.id = `participant-${p.user_id}`;
+
               li.innerHTML = `
-                              <span class="d-flex align-items-center gap-2 flex-grow-1"> 
-                                  <img src="${p.profile_pic_url || defaultProfilePicUrl}" alt="pic" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;">
-                                  ${p.first_name || p.email}
-                                  ${p.is_organizer ? '<span class="badge bg-primary ms-2">Organizer</span>' : ''}
-                              </span>
-                              <span class="badge bg-secondary" id="status-${p.user_id}">${p.status || 'Waiting'}</span>
-                          `;
+                  <span class="d-flex align-items-center gap-2 flex-grow-1"> 
+                      <img src="${defaultProfilePicUrl}" alt="pic" class="rounded-circle" style="width:30px;height:30px;object-fit:cover;">
+                      ${p.first_name} ${p.last_name} 
+                      ${p.is_organizer ? '<span class="badge bg-primary ms-2">Organizer</span>' : ''}
+                  </span>
+                  <span class="badge bg-secondary" id="status-${p.user_id}">${p.status || 'Waiting'}</span>
+              `;
               listElement.appendChild(li);
           });
           countElement.textContent = data.participants.length;

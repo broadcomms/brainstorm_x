@@ -1,5 +1,3 @@
-
-
 # app/sockets.py
 """
 Central Socket.IO hub for BrainStormX workshops.
@@ -49,8 +47,8 @@ def _get_participant_payload(workshop_id: int) -> List[dict]:
             {
                 "user_id": u.user_id,
                 "first_name": u.first_name or "",
-                "profile_pic_url": getattr(u, "profile_pic_url", "")
-                or "/static/default-profile.png",
+                "last_name": u.last_name or "", # Added last_name
+                "profile_pic_url": getattr(u, "profile_pic_url", None), # Pass actual URL or None
                 "is_organizer": u.user_id == workshop.created_by_id,
                 "email": u.email,
             }
@@ -167,7 +165,14 @@ def _on_submit_idea(data):
     idea_id = None  # fallback if not saving
 
     user = User.query.get(user_id)
-    user_name = user.first_name or user.email.split("@")[0] if user else "Unknown"
+    # Use first_name + last_name if available, otherwise fallback
+    if user:
+        user_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        if not user_name: # If both first and last name are empty
+             user_name = user.email.split("@")[0]
+    else:
+        user_name = "Unknown"
+
 
     emit(
         "idea_submitted",

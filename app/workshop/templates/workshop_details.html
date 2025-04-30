@@ -294,7 +294,7 @@
             {% if is_participant.value and current_user.user_id != workshop.created_by_id %} {# Is a participant  #}
                  {% if workshop.status == 'scheduled' or workshop.status == 'inprogress' or workshop.status == 'paused' %}
                     <a href="{{ url_for('workshop_bp.join_workshop', workshop_id=workshop.id) }}" class="btn btn-primary">
-                        <i class="bi bi-door-open-fill"></i> Join Workshop
+                        <i class="bi bi-door-open-fill"></i> Join Workshop 
                     </a>
                  {% elif workshop.status == 'completed' %}
                      <a href="{{ url_for('workshop_bp.workshop_report', workshop_id=workshop.id) }}" class="btn btn-info">
@@ -663,7 +663,8 @@
 </script>
 
 <script>
-  // Join the same lobby room so we can receive AI content updates
+  // Join the same lobby room so we can receive AI content updates 
+  // #TODO: consider separate room for lobby and details
   const socket = io();
   socket.emit('join_room', { room: `workshop_lobby_${workshopId}`, workshop_id: workshopId, user_id: {{ current_user.user_id }} });
 
@@ -671,7 +672,6 @@
   socket.on('ai_content_update', (data) => {
       console.log('[Details] AI content update received:', data);
       if (data.workshop_id === workshopId && data.type === 'agenda' && data.content) {
-          // Replace with your function or direct DOM update
           updateAiContentElement('agenda', data.content);
       }
   });

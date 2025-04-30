@@ -987,7 +987,11 @@ def workshop_lobby(workshop_id):
         joinedload(WorkshopParticipant.user)
     ).filter_by(workshop_id=workshop.id).all()
     
-     # And load linked documents (with their Document) explicitly:
+# Add profile picture URL to each participant
+    for participant in participants:
+        participant.profile_pic_url = url_for('static', filename='images/default-profile.png')
+
+    # And load linked documents (with their Document) explicitly:
     linked_docs = WorkshopDocument.query.options(
         joinedload(WorkshopDocument.document)
     ).filter_by(workshop_id=workshop.id).all()
@@ -1069,8 +1073,9 @@ def workshop_lobby(workshop_id):
         current_app.logger.debug(f"Loaded tip from DB for workshop {workshop_id}")
     else:
         current_app.logger.debug(f"Generating tip for workshop {workshop_id}")
-        ai_tip_raw = generate_tip_text(workshop_id) # Generate if missing
+        
         # Adjust check based on actual error/fallback message from generate_tip_text
+        ai_tip_raw = generate_tip_text(workshop_id)
         if ai_tip_raw and not ai_tip_raw.startswith("No pre‑workshop data found") and not ai_tip_raw.startswith("Could not generate"):
             workshop.tip = ai_tip_raw
             save_needed = True
@@ -1102,6 +1107,10 @@ def workshop_lobby(workshop_id):
         joinedload(WorkshopParticipant.user) # Eager load user details for participants
         ).filter_by(workshop_id=workshop.id).all()
 
+    # Add profile picture URL to each participant
+    for participant in participants:
+        participant.profile_pic_url = url_for('static', filename='images/default-profile.png')
+        
     # Get linked documents (already loaded via joinedload on workshop query)
     linked_docs = workshop.linked_documents # Access the preloaded relationship
     
@@ -1118,13 +1127,11 @@ def workshop_lobby(workshop_id):
         participants=participants,
         current_participant=participant,
         linked_documents=linked_docs,
-        # --- FIX: Pass the correct HTML variables with matching names ---
         ai_agenda=ai_agenda_html,
         ai_rules=ai_rules_html,
         ai_icebreaker=ai_icebreaker_html,
         ai_tip=ai_tip_html,
-        # -------------------------------------------------------------
-        user_is_organizer=is_organizer_flag, # Pass organizer flag
+        user_is_organizer=is_organizer_flag,
     )
     
     

@@ -400,7 +400,7 @@
       const tooltipName = p.first_name ? `${p.first_name} (${p.email})` : p.email;
 
       tile.innerHTML = `
-      <img src="${profilePic}" alt="${displayName}"
+      <img src="/static/${profilePic}" alt="${displayName}"
            class="rounded-circle mb-1 shadow-sm" style="width:40px;height:40px;object-fit:cover; border: 1px solid #ccc;"
            title="${tooltipName}">
       <div class="small text-muted text-truncate" style="font-size:0.75rem;line-height:1;max-width: 55px;">
