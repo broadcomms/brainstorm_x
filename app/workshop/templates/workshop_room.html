@@ -509,16 +509,10 @@
     updateParticipantTiles(data.participants);
   });
 
-  // --- MODIFIED: Handle Introduction and First Task ---
-  socket.on("introduction_start", data => {
-      console.log("Introduction received:", data);
-      // The modified displayTask will handle showing intro + first task
-      displayTask(data);
-      // Hide the "Begin Workshop" button after it's successfully started
-      if (elements.beginIntroForm) {
-          elements.beginIntroForm.style.display = 'none';
-      }
-  });
+  socket.on('introduction_start', data => {
+  console.log("Introduction payload:", data);
+  displayTask(data);
+});
 
   // --- MODIFIED: Handle Subsequent Tasks ---
   socket.on("task_ready", data => {

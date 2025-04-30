@@ -47,14 +47,6 @@ from . import tip
 
 
 
-### #---------------------------------------------------------
-### 2. LOBBY # #---------------------------------------------
-# # This is the area where participants wait for the workshop.
-### #---------------------------------------------------------
-
-
-
-
 
 
 
@@ -208,7 +200,7 @@ def generate_introduction_text(workshop_id):
         return "Could not generate introduction: Workshop data unavailable.", 404
     
     # Define prompt template for generating introduction
-    introduction_prompt_template = f"""
+    introduction_prompt_template = """
     You are the workshop facilitator. Based *only* on the workshop context below, craft:
      1) A warm welcome,
      2) A reminder of the goals & rules,
@@ -217,16 +209,18 @@ def generate_introduction_text(workshop_id):
     Workshop Context:
     {pre_workshop_data}
 
-    Generate output as valid json with the following keys:
-    - welcome: A warm welcome message.
+    Generate output as valid JSON object with the keys:
+    - welcome: A warm welcome message. (< 30 words)
     - goals: A statement of the workshop's goals.
     - rules: A reminder of the workshop rules.
     - instructions: Clear instructions for the first brainstorming question.
     - task: The first brainstorming question.
-    - task_type: The type of task (e.g., brainstorming, discussion).
+    - task_type: The type of task (either, Brainstorming, Discussion, Idea Generation, Cluster Voting, Idea Voting, ).
     - task_duration: The time allocated for the task in seconds. (e.g., 120 for 2 minutes).
-    - task_description: A brief description of the task.
+    - task_description: A brief description of the task. (< 25 words)
     """
+    
+    # Instantiate the Watsonx LLM with the specified model and parameters
     watsonx_llm_introduction = WatsonxLLM(
         model_id="ibm/granite-3-3-8b-instruct",
         url=Config.WATSONX_URL,
@@ -241,9 +235,9 @@ def generate_introduction_text(workshop_id):
                 "top_p":0.7
                 }
     )
-    # Define llm prompt - this now correctly parses the template with the placeholder
-    introduction_prompt = PromptTemplate.from_template(introduction_prompt_template,)
-    
+
+    # Build prompt and LLM chain
+    introduction_prompt = PromptTemplate.from_template(introduction_prompt_template)
     # Define the chain
     chain = introduction_prompt | watsonx_llm_introduction
     # Generate introduction
@@ -253,15 +247,7 @@ def generate_introduction_text(workshop_id):
         raw_introduction = chain.invoke({"pre_workshop_data": pre_workshop_data})
         print(f"[Agent] Workshop raw introduction for {workshop_id}: {raw_introduction}") # DEBUG CODE
 
-        # Optional: Validate/parse JSON if the LLM reliably returns it
-        # try:
-        #     parsed_intro = json.loads(raw_introduction)
-        #     # You might want to return the parsed JSON or specific parts
-        #     return jsonify(parsed_intro) 
-        # except json.JSONDecodeError:
-        #     print("[Agent] Warning: LLM output was not valid JSON.")
-        #     # Fallback to returning raw text if JSON parsing fails
-        #     return raw_introduction
+      
 
         return raw_introduction # Return the raw LLM output directly for now
 

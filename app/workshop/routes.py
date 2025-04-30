@@ -78,6 +78,7 @@ from app.service.routes.agent import (
     generate_next_task_text,
     generate_action_plan_text
 ) 
+from app.service.routes.introduction import get_introduction_payload
 
 from concurrent.futures import ThreadPoolExecutor
 # Create a thread pool for asynchronous generation
@@ -1864,48 +1865,18 @@ def restart_workshop(workshop_id):
 @login_required
 def begin_intro(workshop_id):
     workshop = Workshop.query.get_or_404(workshop_id)
-    # Only organizer can start the introduction
-    if workshop.created_by_id != current_user.user_id:
-        return jsonify({"success": False, "message": "Permission denied"}), 403
+    if not is_organizer(workshop, current_user):
+        return jsonify(success=False, message="Permission denied"), 403
 
-    # Call the agent to get JSON intro
-    raw = generate_introduction_text(workshop_id)
-    print(f"[DEBUG] Raw LLM intro: {raw}")
+    result = get_introduction_payload(workshop_id)
+    # If we got back a tuple, it's an error (message, code)
+    if isinstance(result, tuple) and not isinstance(result[0], dict):
+        err_msg, code = result
+        return jsonify(success=False, message=err_msg), code
 
-    # Attempt to extract clean JSON
-    cleaned_raw = extract_json_block(raw)
-    try:
-        intro = json.loads(cleaned_raw)
-    except json.JSONDecodeError as e:
-        print(f"[ERROR] Failed to parse intro JSON: {e}")
-        return jsonify({"success": False, "message": "Invalid JSON format returned by the LLM."}), 500
-
-    # Persist as a BrainstormTask
-    task = BrainstormTask(
-        workshop_id=workshop.id,
-        title="Introduction",
-        prompt=json.dumps(intro),
-        duration=int(request.form.get("duration", 60)),  # default 60s
-        status="running",
-        started_at=datetime.utcnow()
-    )
-    db.session.add(task)
-    db.session.commit()
-
-    # Emit to everyone in the room
-    socketio.emit("introduction_start", {
-        "task_id": task.id,
-        "welcome": intro["welcome"],
-        "goals": intro["goals"],
-        "rules": intro["rules"],
-        "instructions": intro["instructions"],
-        "task": intro["task"],
-        "task_type": intro["task_type"],
-        "duration": intro["task_duration"],
-        # "duration": int(intro["task_duration"].split()[0]),  # e.g. "5 minutes" → 5
-    }, room=f"workshop_room_{workshop_id}")
-
-    return jsonify({"success": True}), 200
+    payload = result  # the dict from the LLM JSON
+    socketio.emit('introduction_start', payload, room=f'workshop_room_{workshop.id}')
+    return jsonify(success=True)
 
 
 
