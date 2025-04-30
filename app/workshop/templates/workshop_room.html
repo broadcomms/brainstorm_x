@@ -275,8 +275,9 @@
     const safeContent = (content || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
     note.className = "sticky-note border p-2 bg-warning shadow-sm";
-    note.style.minWidth = '100px';
-    note.style.maxWidth = '200px';
+    //note.style.minWidth = '100px';
+    note.style.width = '200px';
+    note.style.minHeight = '60px';
     note.style.wordWrap = 'break-word';
     note.id = `idea-${idea_id}`; // Ensure idea_id is passed
     note.innerHTML = `<strong class="d-block text-truncate small" title="${safeUser}">${safeUser}</strong><p class="mb-0 small">${safeContent}</p>`;
