@@ -204,7 +204,7 @@ def generate_introduction_text(workshop_id):
     You are the workshop facilitator. Based *only* on the workshop context below, craft:
      1) A warm welcome,
      2) A reminder of the goals & rules,
-     3) A clear instruction for the first brainstorming question.
+     3) A clear instruction for the first warm-up brainstorming question.
 
     Workshop Context:
     {pre_workshop_data}
@@ -213,10 +213,10 @@ def generate_introduction_text(workshop_id):
     - welcome: A warm welcome message. (< 30 words)
     - goals: A statement of the workshop's goals.
     - rules: A reminder of the workshop rules.
-    - instructions: Clear instructions for the first brainstorming question.
-    - task: The first brainstorming question.
-    - task_type: The type of task (either, Brainstorming, Discussion, Idea Generation, Cluster Voting, Idea Voting, ).
-    - task_duration: The time allocated for the task in seconds. (e.g., 120 for 2 minutes).
+    - instructions: Clear instructions for the warm-up brainstorming question to warm participants up.
+    - task: The first warm-up brainstorming question.
+    - task_type: The type of task is 'warm-up'.
+    - task_duration: The time allocated for the task in seconds. (e.g., 60 for 1 minute).
     - task_description: A brief description of the task. (< 25 words)
     """
     

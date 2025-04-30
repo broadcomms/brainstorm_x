@@ -46,10 +46,10 @@
         <div class="col-md-3">
           <p class="mb-1"><strong>Status:</strong>
             <span id="workshop-status-badge" class="badge {{ 'bg-warning text-dark' if paused else 'bg-success' }}">
-                {{ workshop.status|capitalize }}
+              {{ workshop.status|capitalize }}
             </span>
-        </p>
-        
+          </p>
+
           <p class="text-muted small">Welcome, {{ current_user.first_name}} {{ current_user.last_name}}!</p>
         </div>
         <!-- End top left -->
@@ -66,7 +66,7 @@
       </div>
       <!-- Top Area Ends -->
 
-      <hr> 
+      <hr>
 
       <!-- Flow control area -->
       <div class="d-flex justify-content-between align-items-center mb-3">
@@ -74,12 +74,11 @@
         <div>
           {% if current_user.user_id == workshop.created_by_id %}
             <form id="begin-intro-form" class="d-inline me-2"
-              action="{{ url_for('workshop_bp.begin_intro', workshop_id=workshop.id) }}" method="POST">
-              {# Removed duration input for now, let LLM decide based on plan #}
-              {# <input type="number" name="duration" value="60" min="10" class="form-control d-inline-block" style="width:80px"/> #}
-              <button type="submit" class="btn btn-sm btn-info">Begin Workshop</button>
-            </form>
-            <button id="next-task-btn" class="btn btn-sm btn-secondary" disabled>Next Task</button> {# Initially disabled #}
+                action="{{ url_for('workshop_bp.begin_intro', workshop_id=workshop.id) }}" method="POST">
+            <button type="submit" class="btn btn-sm btn-info">Begin Workshop</button>
+          </form>
+          <button id="next-task-btn" class="btn btn-sm btn-secondary" disabled>Next Task</button> {# Initially disabled
+          #}
           {% endif %}
         </div>
         {# Timer Display on the Right #}
@@ -89,16 +88,14 @@
             <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
           </div>
         </div>
-        
+
       </div>
       <!-- Flow control area ends -->
 
-      <hr> 
-          <!-- ======== 1.  AI FACILITATOR (moved to top) ======== -->
+      <hr>
+      <!-- ======== 1.  AI FACILITATOR (moved to top) ======== -->
       <h4>AI Facilitator</h4>
-      <div id="task-area"
-           class="border rounded p-3 bg-light position-relative mb-3"
-           style="min-height:200px;">
+      <div id="task-area" class="border rounded p-3 bg-light position-relative mb-3" style="min-height:200px;">
         <!-- content inserted by JS -->
         <p id="task-placeholder" class="text-muted">
           AI workshop facilitator prompt will be dynamically displayed here and
@@ -112,10 +109,9 @@
         </div>
 
         <!-- pause overlay -->
-        <div id="pause-overlay"
-             class="position-absolute top-0 start-0 w-100 h-100 bg-light bg-opacity-75
+        <div id="pause-overlay" class="position-absolute top-0 start-0 w-100 h-100 bg-light bg-opacity-75
                     d-flex justify-content-center align-items-center {{ '' if paused else 'd-none' }}"
-             style="z-index:10;">
+          style="z-index:10;">
           <span class="text-muted fs-4">
             <i class="bi bi-pause-circle-fill"></i> Paused
           </span>
@@ -130,26 +126,21 @@
         <div class="col-md-8">
           <!-- WHITEBOARD (moved into left column) -->
           <h4>Whiteboard</h4>
-          <div id="sticky-board"
-               class="d-flex flex-wrap gap-2 border rounded p-2 mb-3"
-               style="min-height:150px;background-color:#f0f0f0;">
-            <p id="idea-placeholder"
-               class="text-muted small fst-italic">
-               Participants submitted ideas will be pasted here as stick notes.
+          <div id="sticky-board" class="d-flex flex-wrap gap-2 border rounded p-2 mb-3"
+            style="min-height:150px;background-color:#f0f0f0;">
+            <p id="idea-placeholder" class="text-muted small fst-italic">
+              Participants submitted ideas will be pasted here as stick notes.
             </p>
-            <p id="cluster-placeholder"
-               class="text-muted small fst-italic">
-               Clusters of ideas will be organized here by themes
+            <p id="cluster-placeholder" class="text-muted small fst-italic">
+              Clusters of ideas will be organized here by themes
             </p>
           </div>
 
-          <!-- IDEA INPUT (unchanged) -->
+          <!-- IDEA INPUT FORM  -->
           <div id="idea-form-container" class="mb-3">
-            <textarea id="idea-input" class="form-control mb-2"
-                      placeholder="Enter your response here…" rows="2"
-                      autocomplete="off" required></textarea>
-            <button id="idea-submit" type="submit"
-                    class="btn btn-primary w-100">
+            <textarea id="idea-input" class="form-control mb-2" placeholder="Enter your response here…" rows="2"
+              autocomplete="off" required></textarea>
+            <button id="idea-submit" type="submit" class="btn btn-primary w-100">
               <i class="bi bi-send"></i> Submit
             </button>
           </div>
@@ -158,146 +149,146 @@
         <!-- ======== 3.  RIGHT COLUMN (Attendees chat - unchanged) ======== -->
         <div class="col-md-4">
           <h4>Attendees Chat</h4>
-          <div id="chat-messages"
-               class="border rounded p-2 mb-2 bg-light"
-               style="height:300px;overflow-y:scroll;">
+          <div id="chat-messages" class="border rounded p-2 mb-2 bg-light" style="height:300px;overflow-y:scroll;">
           </div>
           <form id="chat-form">
             <div class="input-group">
-              <input id="chat-input" class="form-control"
-                     placeholder="Type message…" {{ 'disabled' if paused }}>
-              <button class="btn btn-primary" type="submit"
-                      {{ 'disabled' if paused }}>Send</button>
+              <input id="chat-input" class="form-control" placeholder="Type message…" {{ 'disabled' if paused }}>
+              <button class="btn btn-primary" type="submit" {{ 'disabled' if paused }}>Send</button>
             </div>
           </form>
         </div>
       </div>
 
-<!-- ===================== Scripts ===================== -->
-{# Make sure socket.io client library is included in base.html #}
-<script>
-  // --- Global State ---
-  let currentTaskId = null;
-  let countdownInterval = null;
-  const workshopId = {{ workshop.id }};
-  const userId = {{ current_user.user_id }};
-  const isOrganizer = {{ 'true' if current_user.user_id == workshop.created_by_id else 'false' }};
-  const roomName = `workshop_room_${workshopId}`;
+      <!-- ===================== Scripts ===================== -->
 
-  // --- DOM Elements ---
-  const elements = {
-      taskArea: document.getElementById('task-area'),
-      taskPlaceholder: document.getElementById('task-placeholder'),
-      taskContent: document.getElementById('task-content'),
-      taskTitle: document.getElementById('task-title'),
-      taskDescription: document.getElementById('task-description'),
-      taskInstructions: document.getElementById('task-instructions'),
-      ideaFormContainer: document.getElementById('idea-form-container'),
-      ideaInput: document.getElementById('idea-input'),
-      ideaSubmitBtn: document.getElementById('idea-submit'),
-      stickyBoard: document.getElementById('sticky-board'),
-      ideaPlaceholder: document.getElementById('idea-placeholder'),
-      progressBar: document.getElementById('progress-bar'),
-      timerText: document.getElementById('timer-text'),
-      chatForm: document.getElementById('chat-form'),
-      chatInput: document.getElementById('chat-input'),
-      chatMessages: document.getElementById('chat-messages'),
-      participantTilesContainer: document.getElementById('participant-tiles-container'),
-      beginIntroForm: document.getElementById('begin-intro-form'),
-      nextTaskBtn: document.getElementById('next-task-btn'),
-      pauseOverlay: document.getElementById('pause-overlay'),
-      statusBadge: document.getElementById('workshop-status-badge'),
-      leaveRoomBtn: document.getElementById('leave-room-btn')
-      // Add other forms if needed (pause, resume, stop)
-  };
+      <script>
+        // --- Global State ---
+        let currentTaskId = null;
 
-  // --- Utility Functions ---
-  async function postForm(event, form) {
-    event.preventDefault();
-    const button = form.querySelector('button[type="submit"]');
-    const originalHtml = button?.innerHTML;
-    if (button) {
-        button.disabled = true;
-        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
-    }
 
-    try {
-      const res = await fetch(form.action, {
-          method: 'POST',
-          body: new FormData(form), // Send form data
-          headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      });
-      // Check if response is JSON, otherwise handle as potential redirect
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-          const data = await res.json();
-          if (res.ok && data.success) {
-            if (data.redirect_url) { window.location.href = data.redirect_url; return; }
-            // If no redirect, maybe just update UI or do nothing if handled by sockets
-            console.log("Form submitted successfully (JSON response):", data.message);
-            // No automatic reload here, rely on socket events for UI updates
-          } else {
-            throw new Error(data.message || `Request failed with status ${res.status}`);
+        let countdownInterval = null;
+        const workshopId = {{ workshop.id }};
+        const userId = {{ current_user.user_id }};
+        const isOrganizer = {{ 'true' if current_user.user_id == workshop.created_by_id else 'false' }};
+        const roomName = `workshop_room_${workshopId}`;
+
+        // --- DOM Elements ---
+        const elements = {
+          taskArea: document.getElementById('task-area'),
+          taskPlaceholder: document.getElementById('task-placeholder'),
+          taskContent: document.getElementById('task-content'),
+          taskTitle: document.getElementById('task-title'),
+          taskDescription: document.getElementById('task-description'),
+          taskInstructions: document.getElementById('task-instructions'),
+          ideaFormContainer: document.getElementById('idea-form-container'),
+          ideaInput: document.getElementById('idea-input'),
+
+          ideaSubmitBtn: document.getElementById('idea-submit'),
+
+          stickyBoard: document.getElementById('sticky-board'),
+          ideaPlaceholder: document.getElementById('idea-placeholder'),
+          progressBar: document.getElementById('progress-bar'),
+          timerText: document.getElementById('timer-text'),
+          chatForm: document.getElementById('chat-form'),
+          chatInput: document.getElementById('chat-input'),
+          chatMessages: document.getElementById('chat-messages'),
+          participantTilesContainer: document.getElementById('participant-tiles-container'),
+          beginIntroForm: document.getElementById('begin-intro-form'),
+          nextTaskBtn: document.getElementById('next-task-btn'),
+          pauseOverlay: document.getElementById('pause-overlay'),
+          statusBadge: document.getElementById('workshop-status-badge'),
+          leaveRoomBtn: document.getElementById('leave-room-btn')
+          // Add other forms if needed (pause, resume, stop)
+        };
+
+        // --- Utility Functions ---
+        async function postForm(event, form) {
+          event.preventDefault();
+          const button = form.querySelector('button[type="submit"]');
+          const originalHtml = button?.innerHTML;
+          if (button) {
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
           }
-      } else if (res.ok && res.redirected) {
-          // Handle server-side redirects
-          window.location.href = res.url;
-      } else if (!res.ok) {
-          // Handle non-JSON errors
-          throw new Error(`Request failed with status ${res.status}`);
-      } else {
-          // Success, but no JSON or redirect (might be intended)
-          console.log("Form submitted successfully (non-JSON response).");
-      }
-    } catch (err) {
-      console.error("Form submission error:", err);
-      alert('Error: ' + err.message);
-    } finally {
-        // Restore button state only if it exists
-        if (button) {
-            button.disabled = false;
-            button.innerHTML = originalHtml;
+
+          try {
+            const res = await fetch(form.action, {
+              method: 'POST',
+              body: new FormData(form), // Send form data
+              headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            // Check if response is JSON, otherwise handle as potential redirect
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+              const data = await res.json();
+              if (res.ok && data.success) {
+                if (data.redirect_url) { window.location.href = data.redirect_url; return; }
+                // If no redirect, maybe just update UI or do nothing if handled by sockets
+                console.log("Form submitted successfully (JSON response):", data.message);
+                // No automatic reload here, rely on socket events for UI updates
+              } else {
+                throw new Error(data.message || `Request failed with status ${res.status}`);
+              }
+            } else if (res.ok && res.redirected) {
+              // Handle server-side redirects
+              window.location.href = res.url;
+            } else if (!res.ok) {
+              // Handle non-JSON errors
+              throw new Error(`Request failed with status ${res.status}`);
+            } else {
+              // Success, but no JSON or redirect (might be intended)
+              console.log("Form submitted successfully (non-JSON response).");
+            }
+          } catch (err) {
+            console.error("Form submission error:", err);
+            alert('Error: ' + err.message);
+          } finally {
+            // Restore button state only if it exists
+            if (button) {
+              button.disabled = false;
+              button.innerHTML = originalHtml;
+            }
+          }
         }
-    }
-  }
 
-  function clearCountdown() {
-      if (countdownInterval) {
-          clearInterval(countdownInterval);
-          countdownInterval = null;
-      }
-      elements.progressBar.style.width = '0%';
-      elements.timerText.textContent = '--:--';
-  }
+        function clearCountdown() {
+          if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+          }
+          elements.progressBar.style.width = '0%';
+          elements.timerText.textContent = '--:--';
+        }
 
-  function startCountdown(seconds, taskIdForCountdown) {
-      clearCountdown(); // Clear any existing timer
-      if (!seconds || seconds <= 0) return;
+        function startCountdown(seconds, taskIdForCountdown) {
+          clearCountdown(); // Clear any existing timer
+          if (!seconds || seconds <= 0) return;
 
-      let remaining = seconds;
-      const totalSeconds = seconds;
+          let remaining = seconds;
+          const totalSeconds = seconds;
 
-      function updateTimer() {
-          const minutes = Math.floor(remaining / 60);
-          const secs    = remaining % 60;
+          function updateTimer() {
+            const minutes = Math.floor(remaining / 60);
+            const secs = remaining % 60;
 
-          // always two‑digit minutes and seconds
-          const mm = String(minutes).padStart(2, '0');
-          const ss = String(secs).   padStart(2, '0');
+            // always two‑digit minutes and seconds
+            const mm = String(minutes).padStart(2, '0');
+            const ss = String(secs).padStart(2, '0');
 
-          elements.timerText.textContent = `${mm}:${ss}`;
-          const pct = ((totalSeconds - remaining) / totalSeconds) * 100;
-          elements.progressBar.style.width = `${pct}%`;
-      }
+            elements.timerText.textContent = `${mm}:${ss}`;
+            const pct = ((totalSeconds - remaining) / totalSeconds) * 100;
+            elements.progressBar.style.width = `${pct}%`;
+          }
 
 
-      updateTimer(); // Initial display
+          updateTimer(); // Initial display
 
-      countdownInterval = setInterval(() => {
-          remaining--;
-          updateTimer();
+          countdownInterval = setInterval(() => {
+            remaining--;
+            updateTimer();
 
-          if (remaining <= 0) {
+            if (remaining <= 0) {
               clearCountdown();
               console.log(`Timer finished for task ${taskIdForCountdown}`);
               // Hide idea form, disable submit button
@@ -307,116 +298,118 @@
 
               // Enable "Next Task" button for the organizer
               if (isOrganizer && elements.nextTaskBtn) {
-                  elements.nextTaskBtn.disabled = false; // <<< This enables the button
-                  elements.nextTaskBtn.innerHTML = 'Next Task'; // Reset button text if it was loading
+                elements.nextTaskBtn.disabled = false; // <<< This enables the button
+                elements.nextTaskBtn.innerHTML = 'Next Task'; // Reset button text if it was loading
               }
-          }
-      }, 1000);
-  }
+            }
+          }, 1000);
+        }
 
-  function displayTask(data) {
-      currentTaskId = data.task_id;
-      elements.taskPlaceholder.style.display = 'none'; // Hide the "Waiting..." placeholder
-      elements.taskContent.style.display = 'block'; // Show the main task content area
+        function displayTask(data) {
+          currentTaskId = data.task_id;
+          elements.taskPlaceholder.style.display = 'none'; // Hide the "Waiting..." placeholder
+          elements.taskContent.style.display = 'block'; // Show the main task content area
 
-      let descriptionHtml = '';
-      let taskDuration = 0;
+          let descriptionHtml = '';
+          let taskDuration = 0; // Default to 0 if not provided
 
-      // Check if it's the introduction data structure
-      if (data.welcome && data.goals && data.rules && data.task) {
-          console.log("Displaying Introduction Task");
-          elements.taskTitle.textContent =  "Introduction" || data.task_type; // Use task_type or default
-          // Build description with intro elements + the first task
-          descriptionHtml = `
+          // Check if it's the introduction data structure
+          if (data.welcome && data.goals && data.rules && data.task) {
+            console.log("Displaying Introduction Task");
+            //elements.taskTitle.textContent =  "Introduction" || data.task_type; // Use task_type or default
+            // Build description with intro elements + the first task
+            taskDuration = parseInt(data.task_duration ?? data.duration ?? 60, 10);
+            descriptionHtml = `
               <p class="mb-2"> ${data.welcome}</p>
               <p class="mb-2"> ${data.goals}</p>
               <p class="mb-2"> ${data.rules}</p>
               <hr>
+
               <!--p>${data.task}</p--> {# The actual first task question/prompt #}
           `;
-          elements.taskInstructions.innerHTML = data.instructions || 'Submit your ideas below.'; // Use provided instructions
-          taskDuration = data.duration; // Use task_duration from intro payload
-      }
-      // Otherwise, assume it's a subsequent task
-      else if (data.title && data.description) {
-          console.log("Displaying Subsequent Task");
-          elements.taskTitle.textContent = data.title;
-          descriptionHtml = `<p>${data.description}</p>`; // Just the task description
-          elements.taskInstructions.innerHTML = data.instructions || 'Submit your ideas below.';
-          taskDuration = data.duration; // Use duration from task payload
-      } else {
-          console.error("Received task data in unexpected format:", data);
-          elements.taskTitle.textContent = "Error";
-          descriptionHtml = "<p>Could not load task details.</p>";
-          elements.taskInstructions.innerHTML = "";
-      }
+            elements.taskInstructions.innerHTML = data.instructions || 'Submit your ideas below.'; // Use provided instructions
+            taskDuration = data.duration; // Use task_duration from intro payload
+          }
+          // Otherwise, assume it's a subsequent task
+          else if (data.title && data.description) {
+            console.log("Displaying Subsequent Task");
+            elements.taskTitle.textContent = data.title;
+            descriptionHtml = `<p>${data.description}</p>`; // Just the task description
+            elements.taskInstructions.innerHTML = data.instructions || 'Submit your ideas below.';
+            taskDuration = parseInt(data.duration ?? 60, 10);
+          } else {
+            console.error("Received task data in unexpected format:", data);
+            elements.taskTitle.textContent = "Error";
+            descriptionHtml = "<p>Could not load task details.</p>";
+            elements.taskInstructions.innerHTML = "";
+          }
 
-      elements.taskDescription.innerHTML = descriptionHtml; // Set the combined/simple description
+          elements.taskDescription.innerHTML = descriptionHtml; // Set the combined/simple description
 
-      // Show idea form and enable button (unless paused)
-      const isPaused = elements.statusBadge.textContent.toLowerCase() === 'paused';
-      if (!isPaused) {
-          elements.ideaFormContainer.style.display = 'block';
-          elements.ideaInput.value = '';
-          elements.ideaSubmitBtn.disabled = false;
-          elements.ideaInput.disabled = false; // Ensure input is enabled
-      } else {
-          // Keep form visible but disabled if paused
-          elements.ideaFormContainer.style.display = 'block';
-          elements.ideaInput.value = '';
-          elements.ideaSubmitBtn.disabled = true;
-          elements.ideaInput.disabled = true;
-      }
-
-
-      // Start countdown using the determined duration
-      startCountdown(taskDuration, data.task_id);
-
-      // Disable "Next Task" button until current task timer finishes
-      if (isOrganizer && elements.nextTaskBtn) {
-          elements.nextTaskBtn.disabled = true;
-      }
-      // Clear previous ideas when a new task starts
-      elements.stickyBoard.innerHTML = '';
-      elements.ideaPlaceholder.style.display = 'block'; // Show the "Ideas will appear here..." placeholder
-  }
+          // Show idea form and enable button (unless paused)
+          const isPaused = elements.statusBadge.textContent.toLowerCase() === 'paused';
+          if (!isPaused) {
+            elements.ideaFormContainer.style.display = 'block';
+            elements.ideaInput.value = '';
+            elements.ideaSubmitBtn.disabled = false;
+            elements.ideaInput.disabled = false; // Ensure input is enabled
+          } else {
+            // Keep form visible but disabled if paused
+            elements.ideaFormContainer.style.display = 'block';
+            elements.ideaInput.value = '';
+            elements.ideaSubmitBtn.disabled = true;
+            elements.ideaInput.disabled = true;
+          }
 
 
+          // Start countdown using the determined duration
+          startCountdown(taskDuration, data.task_id);
+
+          // Disable "Next Task" button until current task timer finishes
+          if (isOrganizer && elements.nextTaskBtn) {
+            elements.nextTaskBtn.disabled = true;
+          }
+          // Clear previous ideas when a new task starts
+          elements.stickyBoard.innerHTML = '';
+          elements.ideaPlaceholder.style.display = 'block'; // Show the "Ideas will appear here..." placeholder
+        }
 
 
-  function addStickyNote({ user, content, idea_id }) {
-      elements.ideaPlaceholder.style.display = 'none'; // Hide placeholder
-      const note = document.createElement("div");
-      // Basic sanitization
-      const safeUser = user.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const safeContent = content.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-      note.className = "sticky-note border p-2 bg-warning shadow-sm";
-      note.style.minWidth = '100px';
-      note.style.maxWidth = '200px'; // Prevent very wide notes
-      note.id = `idea-${idea_id}`;
-      note.innerHTML = `<strong class="d-block text-truncate" title="${safeUser}">${safeUser}</strong><p class="mb-0" style="word-wrap: break-word;">${safeContent}</p>`;
-      elements.stickyBoard.appendChild(note);
-  }
 
-  function updateParticipantTiles(participants) {
-    if (!elements.participantTilesContainer) return;
-    elements.participantTilesContainer.innerHTML = ''; // Clear existing tiles
-    if (!participants || !participants.length) {
-      elements.participantTilesContainer.innerHTML = '<span class="text-muted small fst-italic">No active participants</span>';
-      return;
-    }
-    participants.forEach(p => {
-      const tile = document.createElement('div');
-      tile.className = 'participant-tile text-center position-relative';
-      tile.id = `participant-tile-${p.user_id}`;
-      tile.style.width = '60px';
+        function addStickyNote({ user, content, idea_id }) {
+          elements.ideaPlaceholder.style.display = 'none'; // Hide placeholder
+          const note = document.createElement("div");
+          // Basic sanitization
+          const safeUser = user.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          const safeContent = content.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-      const profilePic = p.profile_pic_url || "{{ url_for('static', filename='default-profile.png') }}";
-      const displayName = p.first_name || p.email.split('@')[0];
-      const tooltipName = p.first_name ? `${p.first_name} (${p.email})` : p.email;
+          note.className = "sticky-note border p-2 bg-warning shadow-sm";
+          note.style.minWidth = '100px';
+          note.style.maxWidth = '200px'; // Prevent very wide notes
+          note.id = `idea-${idea_id}`;
+          note.innerHTML = `<strong class="d-block text-truncate" title="${safeUser}">${safeUser}</strong><p class="mb-0" style="word-wrap: break-word;">${safeContent}</p>`;
+          elements.stickyBoard.appendChild(note);
+        }
 
-      tile.innerHTML = `
+        function updateParticipantTiles(participants) {
+          if (!elements.participantTilesContainer) return;
+          elements.participantTilesContainer.innerHTML = ''; // Clear existing tiles
+          if (!participants || !participants.length) {
+            elements.participantTilesContainer.innerHTML = '<span class="text-muted small fst-italic">No active participants</span>';
+            return;
+          }
+          participants.forEach(p => {
+            const tile = document.createElement('div');
+            tile.className = 'participant-tile text-center position-relative';
+            tile.id = `participant-tile-${p.user_id}`;
+            tile.style.width = '60px';
+
+            const profilePic = p.profile_pic_url || "{{ url_for('static', filename='default-profile.png') }}";
+            const displayName = p.first_name || p.email.split('@')[0];
+            const tooltipName = p.first_name ? `${p.first_name} (${p.email})` : p.email;
+
+            tile.innerHTML = `
       <img src="/static/${profilePic}" alt="${displayName}"
            class="rounded-circle mb-1 shadow-sm" style="width:40px;height:40px;object-fit:cover; border: 1px solid #ccc;"
            title="${tooltipName}">
@@ -424,299 +417,320 @@
         ${displayName}
       </div>
       ${p.is_organizer
-          ? '<span class="badge bg-primary rounded-pill" ' +
-          'style="font-size:0.6rem;position:absolute;top:0;right:0;">Host</span>'
-          : ''
-        }
+                ? '<span class="badge bg-primary rounded-pill" ' +
+                'style="font-size:0.6rem;position:absolute;top:0;right:0;">Host</span>'
+                : ''
+              }
     `;
-      elements.participantTilesContainer.appendChild(tile);
-    });
-  }
+            elements.participantTilesContainer.appendChild(tile);
+          });
+        }
 
-  function appendChatMessage(userName, message, timestamp) {
-    if (!elements.chatMessages) return;
-    const el = document.createElement('div');
-    el.classList.add('mb-1', 'small');
+        function appendChatMessage(userName, message, timestamp) {
+          if (!elements.chatMessages) return;
+          const el = document.createElement('div');
+          el.classList.add('mb-1', 'small');
 
-    const safeUserName = userName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const safeMessage = message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          const safeUserName = userName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          const safeMessage = message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    let timeString = '';
-    if (timestamp) {
-      try {
-        timeString = `<span class="text-muted ms-1" style="font-size: 0.7em;">${new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>`;
-      } catch (e) { console.warn("Could not parse timestamp:", timestamp); }
-    }
-
-    el.innerHTML = `<strong>${safeUserName}</strong>: ${safeMessage}${timeString}`;
-    elements.chatMessages.appendChild(el);
-    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
-  }
-
-  function updateWorkshopStatusUI(status) {
-      const isPaused = status === 'paused';
-      const isInProgress = status === 'inprogress';
-
-      // Update Status Badge
-      elements.statusBadge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-      elements.statusBadge.className = `badge ${isPaused ? 'bg-warning text-dark' : 'bg-success'}`;
-
-      // Toggle Pause Overlay
-      elements.pauseOverlay.classList.toggle('d-none', !isPaused);
-
-      // Enable/Disable Chat Input
-      elements.chatInput.disabled = isPaused;
-      elements.chatForm.querySelector('button').disabled = isPaused;
-
-      // Enable/Disable Idea Input (only if a task is active)
-      const isTaskActive = !!currentTaskId; // Check if a task is running
-      elements.ideaInput.disabled = isPaused || !isTaskActive;
-      elements.ideaSubmitBtn.disabled = isPaused || !isTaskActive;
-
-      // Organizer Controls (Pause/Resume buttons) - Handled by page reload for simplicity now
-  }
-
-
-  // --- Socket.IO Setup ---
-  const socket = io();
-
-  socket.on('connect', () => {
-    socket.emit('join_room', {
-      room: roomName,
-      workshop_id: workshopId,
-      user_id: userId
-    });
-    console.log(`Socket connected, joined room: ${roomName}`);
-    // Request initial participant list upon joining
-    socket.emit('request_participant_list', { workshop_id: workshopId, room: roomName });
-  });
-
-  socket.on('connect_error', (err) => {
-    console.error('Socket connection error:', err);
-    alert('Connection error. Please refresh the page.');
-  });
-
-  // --- Socket Event Handlers ---
-  socket.on('workshop_stopped', d => {
-    if (d.workshop_id === workshopId) {
-      alert('The workshop has ended.');
-      window.location.href = "{{ url_for('workshop_bp.workshop_report', workshop_id=workshop.id) }}";
-    }
-  });
-
-  // Handle pause/resume by reloading for simplicity (ensures all state is correct)
-  // Alternatively, update UI elements directly via updateWorkshopStatusUI
-  ['paused', 'resumed'].forEach(evt => {
-    socket.on(`workshop_${evt}`, d => {
-      if (d.workshop_id === workshopId) {
-        console.log(`Workshop ${evt}, reloading page.`);
-        location.reload();
-        // updateWorkshopStatusUI(evt); // Alternative to reload
-      }
-    });
-  });
-
-  socket.on('receive_message', d => {
-    if (d.room !== roomName) return;
-    appendChatMessage(d.user_name, d.message, d.timestamp);
-  });
-
-  socket.on('participant_list_update', data => {
-    if (data.workshop_id !== workshopId) return;
-    updateParticipantTiles(data.participants);
-  });
-
-  socket.on('introduction_start', data => {
-  console.log("Introduction payload:", data);
-  displayTask(data);
-});
-
-  // --- MODIFIED: Handle Subsequent Tasks ---
-  socket.on("task_ready", data => {
-      console.log("Next task received:", data);
-      // The modified displayTask will handle showing only the new task details
-      displayTask(data);
-      // Ensure the "Next Task" button is disabled again until this new timer finishes
-      if (isOrganizer && elements.nextTaskBtn) {
-          elements.nextTaskBtn.disabled = true;
-      }
-  });
-
-  // --- Event Listeners ---
-  document.addEventListener('DOMContentLoaded', () => {
-    // Attach handlers for organizer forms that change state (stop, pause, resume)
-    ['stop-workshop-form-room', 'pause-workshop-form-room', 'resume-workshop-form-room']
-      .forEach(id => { const f = document.getElementById(id); if (f) f.addEventListener('submit', e => postForm(e, f)); });
-
-    // Leave Room Button
-    if (elements.leaveRoomBtn) {
-      elements.leaveRoomBtn.addEventListener('click', (e) => {
-        e.preventDefault(); // Prevent default link behavior
-        console.log(`Emitting leave_room for ${roomName}`);
-        socket.emit('leave_room', {
-          room: roomName,
-          workshop_id: workshopId,
-          user_id: userId
-        });
-        // Navigate after emitting
-        window.location.href = elements.leaveRoomBtn.getAttribute('data-leave-url');
-      });
-    }
-
-    // Begin Introduction Form (Organizer only)
-    if (elements.beginIntroForm) {
-        elements.beginIntroForm.addEventListener('submit', async e => {
-            e.preventDefault();
-            const form = e.target;
-            const button = form.querySelector('button[type="submit"]');
-            button.disabled = true;
-            button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
+          let timeString = '';
+          if (timestamp) {
             try {
-                // Use fetch to POST, backend emits 'introduction_start'
-                const response = await fetch(form.action, {
-                    method: "POST",
-                    body: new FormData(form), // Send form data if any
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                });
-                const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Failed to begin introduction');
-                }
-                // Success - button remains disabled, wait for socket event
-                console.log("Introduction initiated.");
-                // Hide the intro button after successful start
-                elements.beginIntroForm.style.display = 'none';
-            } catch (err) {
-                console.error("Error beginning introduction:", err);
-                alert('Error: ' + err.message);
-                button.disabled = false; // Re-enable on error
-                button.innerHTML = 'Begin Introduction';
+              timeString = `<span class="text-muted ms-1" style="font-size: 0.7em;">${new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>`;
+            } catch (e) { console.warn("Could not parse timestamp:", timestamp); }
+          }
+
+          el.innerHTML = `<strong>${safeUserName}</strong>: ${safeMessage}${timeString}`;
+          elements.chatMessages.appendChild(el);
+          elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+        }
+
+        function updateWorkshopStatusUI(status) {
+          const isPaused = status === 'paused';
+          const isInProgress = status === 'inprogress';
+
+          // Update Status Badge
+          elements.statusBadge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+          elements.statusBadge.className = `badge ${isPaused ? 'bg-warning text-dark' : 'bg-success'}`;
+
+          // Toggle Pause Overlay
+          elements.pauseOverlay.classList.toggle('d-none', !isPaused);
+
+          // Enable/Disable Chat Input
+          elements.chatInput.disabled = isPaused;
+          elements.chatForm.querySelector('button').disabled = isPaused;
+
+          // Enable/Disable Idea Input (only if a task is active)
+          const isTaskActive = !!currentTaskId; // Check if a task is running
+          elements.ideaInput.disabled = isPaused || !isTaskActive;
+          elements.ideaSubmitBtn.disabled = isPaused || !isTaskActive;
+
+          // Organizer Controls (Pause/Resume buttons) - Handled by page reload for simplicity now
+        }
+
+
+        // --- Socket.IO Setup ---
+        const socket = io();
+
+        socket.on('connect', () => {
+          socket.emit('join_room', {
+            room: roomName,
+            workshop_id: workshopId,
+            user_id: userId
+          });
+          console.log(`Socket connected, joined room: ${roomName}`);
+          // Request initial participant list upon joining
+          socket.emit('request_participant_list', { workshop_id: workshopId, room: roomName });
+        });
+
+
+
+
+        socket.on('new_idea', data => {
+            console.log('New idea received:', data);
+            addStickyNote(data);
+        });
+
+
+
+
+        socket.on('connect_error', (err) => {
+          console.error('Socket connection error:', err);
+          alert('Connection error. Please refresh the page.');
+        });
+
+        // --- Socket Event Handlers ---
+        socket.on('workshop_stopped', d => {
+          if (d.workshop_id === workshopId) {
+            alert('The workshop has ended.');
+            window.location.href = "{{ url_for('workshop_bp.workshop_report', workshop_id=workshop.id) }}";
+          }
+        });
+
+        // Handle pause/resume by reloading for simplicity (ensures all state is correct)
+        // Alternatively, update UI elements directly via updateWorkshopStatusUI
+        ['paused', 'resumed'].forEach(evt => {
+          socket.on(`workshop_${evt}`, d => {
+            if (d.workshop_id === workshopId) {
+              console.log(`Workshop ${evt}, reloading page.`);
+              location.reload();
+              // updateWorkshopStatusUI(evt); // Alternative to reload
             }
+          });
         });
-    }
 
-    // Next Task Button (Organizer only)
-    if (elements.nextTaskBtn) {
-        elements.nextTaskBtn.addEventListener("click", async () => {
-            const btn = elements.nextTaskBtn;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
-            try {
+        socket.on('receive_message', d => {
+          if (d.room !== roomName) return;
+          appendChatMessage(d.user_name, d.message, d.timestamp);
+        });
+
+        socket.on('participant_list_update', data => {
+          if (data.workshop_id !== workshopId) return;
+          updateParticipantTiles(data.participants);
+        });
+
+        // -------------------------------------------------
+        //  Handle the backend “introduction_start” event
+        // -------------------------------------------------
+        socket.on('introduction_start', data => {
+          console.log("Introduction payload:", data);
+
+
+          displayTask(data);
+
+          if (data.task_duration) {
+            startCountdown(parseInt(data.task_duration, 10), data.task_id ?? null);
+          }
+
+          // hide the “Begin Workshop” button
+          if (elements.beginIntroForm) {
+            elements.beginIntroForm.style.display = 'none';
+          }
+
+          // 4) Make sure the idea-submission form is visible and enabled
+          elements.ideaFormContainer.style.display = 'block';
+          elements.ideaSubmitBtn.disabled = false;
+          elements.ideaInput.disabled = false;
+        });
+
+        // --- MODIFIED: Handle Subsequent Tasks ---
+        socket.on("task_ready", data => {
+          console.log("Next task received:", data);
+          // The modified displayTask will handle showing only the new task details
+          displayTask(data);
+          // Ensure the "Next Task" button is disabled again until this new timer finishes
+          if (isOrganizer && elements.nextTaskBtn) {
+            elements.nextTaskBtn.disabled = true;
+          }
+        });
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', () => {
+          // Attach handlers for organizer forms that change state (stop, pause, resume)
+          ['stop-workshop-form-room', 'pause-workshop-form-room', 'resume-workshop-form-room']
+            .forEach(id => { const f = document.getElementById(id); if (f) f.addEventListener('submit', e => postForm(e, f)); });
+
+          // Leave Room Button
+          if (elements.leaveRoomBtn) {
+            elements.leaveRoomBtn.addEventListener('click', (e) => {
+              e.preventDefault(); // Prevent default link behavior
+              console.log(`Emitting leave_room for ${roomName}`);
+              socket.emit('leave_room', {
+                room: roomName,
+                workshop_id: workshopId,
+                user_id: userId
+              });
+              // Navigate after emitting
+              window.location.href = elements.leaveRoomBtn.getAttribute('data-leave-url');
+            });
+          }
+
+  // Begin Introduction Form (Organizer only)
+  if (elements.beginIntroForm) {
+    elements.beginIntroForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const form = e.target;
+      const button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
+
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          body: new FormData(form),
+        });
+
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+          console.log("Workshop introduction started successfully.");
+          elements.beginIntroForm.style.display = 'none';  // Hide button after success
+        } else {
+          throw new Error(data.message || 'Failed to start workshop introduction');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error: ' + err.message);
+        button.disabled = false;
+        button.innerHTML = 'Begin Workshop';
+      }
+    });
+  }
+
+          // Next Task Button (Organizer only)
+          if (elements.nextTaskBtn) {
+            elements.nextTaskBtn.addEventListener("click", async () => {
+              const btn = elements.nextTaskBtn;
+              btn.disabled = true;
+              btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+              try {
                 // Use fetch to POST, backend emits 'task_ready'
                 const res = await fetch(`{{ url_for('workshop_bp.next_task', workshop_id=workshop.id) }}`, {
-                    method: 'POST',
-                    headers: {'X-Requested-With':'XMLHttpRequest'}
+                  method: 'POST',
+                  headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {
-                    throw new Error(data.message || 'Failed to get next task');
+                  throw new Error(data.message || 'Failed to get next task');
                 }
                 // Success - button remains disabled, wait for socket event 'task_ready'
                 console.log("Next task requested.");
-            } catch (err) {
+              } catch (err) {
                 console.error("Error requesting next task:", err);
                 alert("Error: " + err.message);
                 // Re-enable button on error only if the timer isn't running? Or maybe always?
                 // Check if countdown is active before re-enabling
                 if (!countdownInterval) {
-                    btn.disabled = false;
+                  btn.disabled = false;
                 }
                 btn.innerHTML = 'Next Task';
-            }
-        });
-    }
-    // --- after your Next Task handler in DOMContentLoaded ---
-    // Idea Submission (all participants)
-    const ideaForm = document.createElement('form');
-    ideaForm.id = 'idea-form';
-    ideaForm.className = 'input-group';
-    ideaForm.innerHTML = `
-                        <textarea id="idea-input" class="form-control mb-2" placeholder="Enter your response here..." 
-                          rows="2" autocomplete="off" required style="border-radius: 0.375rem;"></textarea>
-                        <button id="idea-submit" type="submit" class="btn btn-primary w-100">
-                          <i class="bi bi-send"></i> Submit
-                        </button>
-    `;
-    // replace the existing container
-    const ideaContainer = document.getElementById('idea-form-container');
-    ideaContainer.innerHTML = '';
-    ideaContainer.appendChild(ideaForm);
+              }
+            });
+          }
+          
 
-    ideaForm.addEventListener('submit', e => {
+
+
+
+
+
+
+
+          // Chat Form
+          if (elements.chatForm) {
+            elements.chatForm.addEventListener('submit', e => {
+              e.preventDefault();
+              const msg = elements.chatInput.value.trim();
+              if (!msg) return;
+              socket.emit('send_message', {
+                room: roomName,
+                message: msg,
+                user_id: userId,
+                workshop_id: workshopId
+              });
+              elements.chatInput.value = '';
+            });
+          }
+
+          // Idea Submission Form (Corrected & Simplified)
+          document.addEventListener('DOMContentLoaded', () => {
+  // ...existing code...
+
+  // Chat Form
+  if (elements.chatForm) {
+    elements.chatForm.addEventListener('submit', e => {
       e.preventDefault();
-      const content = document.getElementById('idea-input').value.trim();
-      if (!content) return;
-      socket.emit('submit_idea', { room: roomName, content });
-      document.getElementById('idea-input').value = '';
+      const msg = elements.chatInput.value.trim();
+      if (!msg) return;
+      socket.emit('send_message', {
+        room: roomName,
+        message: msg,
+        user_id: userId,
+        workshop_id: workshopId
+      });
+      elements.chatInput.value = '';
     });
+  }
 
+  // Idea Submission Form (Corrected & Simplified)
+  elements.ideaSubmitBtn.addEventListener('click', async () => {
+    // ...existing code...
+  });
 
-
-
-
-
-
-    // Chat Form
-    if (elements.chatForm) {
-        elements.chatForm.addEventListener('submit', e => {
-          e.preventDefault();
-          const msg = elements.chatInput.value.trim();
-          if (!msg) return;
-          socket.emit('send_message', {
-            room: roomName,
-            message: msg,
-            user_id: userId,
-            workshop_id: workshopId
-          });
-          elements.chatInput.value = '';
-        });
+  // beforeunload listener (attempt to notify server on close)
+  window.addEventListener('beforeunload', (event) => {
+    if (socket && socket.connected) {
+      console.log(`Window unloading, emitting leave_room for ${roomName}`);
+      socket.emit('leave_room', {
+        room: roomName,
+        workshop_id: workshopId,
+        user_id: userId
+      });
     }
-
-    // Idea Submission Form
-    if (elements.ideaSubmitBtn) {
-        elements.ideaSubmitBtn.onclick = async () => {
-            const content = elements.ideaInput.value.trim();
-            if (!content || !currentTaskId) return; // Need content and active task
-
-            elements.ideaSubmitBtn.disabled = true; // Prevent double submit
-            try {
-                const response = await fetch(`{{ url_for('workshop_bp.submit_idea', workshop_id=workshop.id) }}`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ task_id: currentTaskId, content })
-                });
-                const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Failed to submit idea');
-                }
-                elements.ideaInput.value = ""; // Clear input on success
-            } catch (err) {
-                console.error("Error submitting idea:", err);
-                alert('Error: ' + err.message);
-            } finally {
-                // Re-enable unless paused
-                 const isPaused = elements.statusBadge.textContent.toLowerCase() === 'paused';
-                 if (!isPaused) {
-                    elements.ideaSubmitBtn.disabled = false;
-                 }
-            }
-        };
-    }
+  });
+}); // End DOMContentLoaded
 
     // beforeunload listener (attempt to notify server on close)
     window.addEventListener('beforeunload', (event) => {
-        if (socket && socket.connected) {
-          console.log(`Window unloading, emitting leave_room for ${roomName}`);
-          // Using emit is less reliable here, sendBeacon to a dedicated HTTP endpoint is better
-          socket.emit('leave_room', {
-            room: roomName,
-            workshop_id: workshopId,
-            user_id: userId
-          });
-        }
-    });
+          if (socket && socket.connected) {
+            console.log(`Window unloading, emitting leave_room for ${roomName}`);
+            // Using emit is less reliable here, sendBeacon to a dedicated HTTP endpoint is better
+            socket.emit('leave_room', {
+              room: roomName,
+              workshop_id: workshopId,
+              user_id: userId
+            });
+          }
+        });
 
   }); // End DOMContentLoaded
 
-</script>
-{% endblock %}
+      </script>
+      {% endblock %}
