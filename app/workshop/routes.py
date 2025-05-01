@@ -1926,7 +1926,8 @@ def next_task(workshop_id):
         
     try:    
         
-            # --- Get Override Task Duration for Debugging --- Value ---
+            # --- GET OVERRIDE TASK DURATION FOR DEBUGGING--- Value is specified in seconds
+            # ----------------------------------------------------------DEBUGGING ---
             override_duration_str = current_app.config.get('DEBUG_OVERRIDE_TASK_DURATION')
             override_duration = None
             if override_duration_str:
@@ -1936,23 +1937,47 @@ def next_task(workshop_id):
                     current_app.logger.error(f"[DEBUG] Invalid DEBUG_OVERRIDE_TASK_DURATION value: {override_duration_str}")
             # ----------------------------------------------------------DEBUGGING ---
         
-
-            # --- Determine if task is brainstorming ---
-            if next_task_type == "brainstorming":
-                result = get_next_task_payload(workshop_id, action_plan_item=None) # Pass None or context if needed
+        
+        
+        
+        
+            #
+            # --- Determine if task_type is [ "brainstorming" ]---
+            #
+            if next_task_type == "brainstorming":# Brainstorming task
+                current_app.logger.debug(f"[First Task ] Brainstorming Task")
+                result = get_next_task_payload(
+                    workshop_id, 
+                    action_plan_item=None
+                    ) # Pass None or context if needed
+                
                 if isinstance(result, tuple): raise Exception(f"Task generation failed: {result[0]}")
+                
+                ## --- Set Task Payload ---
                 task_payload = result
                 
                 
-                # --- INTERCEPTION DURATION OVERRIDE FOR DEBUGGING ---
+                # --- OVERRIDE TASK DURATION FOR TODO: TESTING/DEBUGGING ---
                 if override_duration is not None:
                     original_duration = task_payload.get("task_duration")
                     current_app.logger.warning(f"[DEBUG] Overriding {next_task_type} duration from {original_duration} to {override_duration}s")
                     task_payload['task_duration'] = override_duration
-                 # --- END INTERCEPTION DURATION OVERRIDE FOR DEBUGGING ---
+                 # --- END OVERRIDE TASK DURATION  TODO: REMOVE DEBUGGING ---
                 
-                
+                # Specify the task creation function
                 task_creation_function = create_standard_task
+                
+                
+                
+                
+                
+                
+                
+
+
+
+
+
 
             elif next_task_type == "clustering_voting":
                 # Find the *previous* brainstorming task to get ideas
@@ -2132,6 +2157,16 @@ def create_standard_task(workshop, payload):
     db.session.add(task)
     db.session.flush() # Get ID before returning
     return task
+
+
+
+
+
+
+
+
+
+
 
 def create_clustering_task(workshop, payload):
     """Creates a task and associated IdeaCluster records."""

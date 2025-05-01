@@ -3,7 +3,6 @@ import json
 import re
 from flask import current_app
 from app.utils.json_utils import extract_json_block
-from app.utils.data_aggregation import aggregate_pre_workshop_data
 from app.service.routes.agent import generate_next_task_text, extract_json_block
 
 def get_next_task_payload(workshop_id: int, action_plan_item: dict = None):
