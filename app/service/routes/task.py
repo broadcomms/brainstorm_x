@@ -16,8 +16,17 @@ def get_next_task_payload(workshop_id: int, action_plan_item: dict = None):
     """
     current_app.logger.debug(f"[Task Service] Generating next task for workshop {workshop_id}")
 
+
+
+
+
     # Call the agent function to get the raw LLM output
     raw_task_data = generate_next_task_text(workshop_id, action_plan_item=action_plan_item)
+
+
+
+
+
 
     # Check if the generator returned an error string directly
     if isinstance(raw_task_data, str) and raw_task_data.startswith('{"error":'):

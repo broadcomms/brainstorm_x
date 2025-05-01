@@ -81,14 +81,6 @@ from app.utils.data_aggregation import aggregate_pre_workshop_data
 # Import extract_json_block
 from app.service.routes.agent import extract_json_block 
 
-from app.service.routes.agent import (
-    generate_next_task_text, # Keep for brainstorming/discussion prompts
-    # --- ADD NEW SERVICE IMPORTS ---
-    generate_clusters_and_voting_task, # Needs to be created
-    generate_feasibility_task,         # Needs to be created
-    generate_discussion_task,          # Needs to be created (or use generate_next_task_text)
-    generate_summary_task              # Needs to be created
-) 
 
 from app.service.routes.introduction import get_introduction_payload
 from app.service.routes.task import get_next_task_payload
@@ -142,7 +134,7 @@ def load_or_schedule_ai_content(workshop, attr, generator_func, event_type):
     event_type: string used for socket event type, e.g. 'agenda', 'rules'
     """
     raw = getattr(workshop, attr)
-    if raw:
+    if (raw):
         # Already generated: convert to HTML
         return markdown.markdown(raw)
 
@@ -532,10 +524,7 @@ def view_workshop(workshop_id):
     )
     linked_docs = workshop.linked_documents.all()
     
-    # --- Render Action Plan HTML ---
-    action_plan_html = render_action_plan_html(workshop.task_sequence)
-    # --- Store raw JSON for JS ---
-    raw_action_plan_json = workshop.task_sequence or '[]' # Default to empty JSON array string
+ 
 
     
     
@@ -546,9 +535,7 @@ def view_workshop(workshop_id):
         potential_participants=potential_participants,
         available_documents=available_documents,
         linked_documents=linked_docs,
-        user_is_organizer=user_is_organizer,
-        action_plan_html=action_plan_html, # Pass rendered HTML
-        raw_action_plan_json=raw_action_plan_json # Pass raw JSON string for JS
+        user_is_organizer=user_is_organizer# Pass raw JSON string for JS
     )
 
 
@@ -1392,150 +1379,12 @@ def edit_agenda(workshop_id):
 
 
 
-# --- Helper Function to Render Action Plan HTML ---
-def render_action_plan_html(action_plan_json_string):
-    """
-    Parses the action plan JSON string and returns an HTML list representation.
-    Returns placeholder text if parsing fails or data is empty.
-    """
-    if not action_plan_json_string:
-        return '<p class="text-muted mb-0">No action plan generated yet.</p>'
-
-    try:
-        # Clean potential markdown/fencing if LLM added it
-        cleaned_json_string = extract_json_block(action_plan_json_string)
-        action_plan_items = json.loads(cleaned_json_string)
-
-        if not isinstance(action_plan_items, list) or not action_plan_items:
-            return '<p class="text-muted mb-0">Action plan is empty or invalid.</p>'
-
-        html_output = '<ul class="list-group action-plan-list">'
-        for index, item in enumerate(action_plan_items):
-            phase = escape(item.get('phase', 'N/A')) # Use escape for security
-            description = escape(item.get('description', 'No description'))
-            # Use index as a simple identifier for deletion
-            html_output += f'''
-            <li class="list-group-item d-flex align-items-center">
-                <input class="form-check-input me-2" type="checkbox" value="{index}" id="action-item-{index}">
-                <label class="form-check-label flex-grow-1" for="action-item-{index}">
-                    <strong>{phase}:</strong> {description}
-                </label>
-            </li>
-            '''
-        html_output += '</ul>'
-        return html_output
-
-    except json.JSONDecodeError:
-        current_app.logger.warning(f"Failed to decode action plan JSON: {action_plan_json_string[:100]}...")
-        # Fallback: Render the raw string safely if JSON parsing fails
-        return f'<div class="alert alert-warning">Could not parse action plan JSON. Raw content:</div><pre><code>{escape(action_plan_json_string)}</code></pre>'
-    except Exception as e:
-        current_app.logger.error(f"Error rendering action plan HTML: {e}")
-        return '<p class="text-danger mb-0">Error rendering action plan.</p>'
 
 
 
 
 
 
-
-
-@workshop_bp.route("/<int:workshop_id>/regenerate/action_plan", methods=["POST"])
-@login_required
-def regenerate_action_plan(workshop_id):
-    workshop = check_organizer_permission(workshop_id)
-
-    try:
-        # --- MODIFIED: Call generator with force=True ---
-        new_plan_raw = generate_action_plan_text(workshop_id, force=True)
-        # ------------------------------------------------
-
-        print("WORKSHOP Regenerating action plan for workshop:", new_plan_raw) # Keep for debugging if needed
-
-        # --- Validation ---
-        # Check for specific error messages from the generator
-        if isinstance(new_plan_raw, str) and new_plan_raw.startswith("Could not generate"):
-             current_app.logger.error(f"Failed to generate new action plan for workshop {workshop_id}: {new_plan_raw}")
-             return jsonify({"success": False, "message": new_plan_raw}), 500
-
-        # Attempt to parse to ensure it's valid JSON before saving (generator should return cleaned JSON now)
-        try:
-            json.loads(new_plan_raw) # Validate the string from the generator
-            workshop.task_sequence = new_plan_raw # Save the validated JSON string
-        except json.JSONDecodeError:
-             current_app.logger.error(f"Regenerated action plan is invalid JSON for workshop {workshop_id}. Raw: {new_plan_raw[:100]}...")
-             # Return error if the generator somehow still produced invalid JSON
-             return jsonify({"success": False, "message": "Generated action plan was not valid JSON."}), 500
-
-        db.session.commit()
-        current_app.logger.info(f"Successfully regenerated and saved action plan for workshop {workshop_id}")
-
-        # --- Render the HTML list from the new JSON string ---
-        new_plan_html = render_action_plan_html(workshop.task_sequence)
-
-        # Emit update via WebSocket
-        socketio.emit('ai_content_update', {
-            'workshop_id': workshop_id,
-            'type': 'action_plan',
-            'content': new_plan_html
-        }, room=f'workshop_lobby_{workshop_id}')
-        socketio.emit('ai_content_update', {
-            'workshop_id': workshop_id,
-            'type': 'action_plan',
-            'content': new_plan_html
-        }, room=f'workshop_room_{workshop_id}')
-
-        # --- Return the rendered HTML list and the raw JSON ---
-        # The JS already fetches raw JSON separately, so just returning HTML is fine
-        return jsonify({"success": True, "content": new_plan_html})
-
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error regenerating action plan for workshop {workshop_id}: {e}", exc_info=True) # Add exc_info for traceback
-        return jsonify({"success": False, "message": "Server error during regeneration."}), 500
-
-
-@workshop_bp.route("/<int:workshop_id>/edit/action_plan", methods=["POST"])
-@login_required
-def edit_action_plan(workshop_id):
-    workshop = check_organizer_permission(workshop_id)
-    # Expecting the updated JSON *string* in the 'content' field
-    edited_json_string = request.json.get('content')
-
-    if edited_json_string is None:
-        return jsonify({"success": False, "message": "No content provided."}), 400
-
-    # Validate if the received string is valid JSON before saving
-    try:
-        json.loads(edited_json_string) # Try parsing
-        workshop.task_sequence = edited_json_string # Save the validated JSON string
-        db.session.commit()
-
-        # --- Render the HTML list from the *saved* JSON string ---
-        edited_content_html = render_action_plan_html(workshop.task_sequence)
-
-        # Emit update via WebSocket (optional)
-        socketio.emit('ai_content_update', {
-            'workshop_id': workshop_id,
-            'type': 'action_plan',
-            'content': edited_content_html
-        }, room=f'workshop_lobby_{workshop_id}')
-        socketio.emit('ai_content_update', {
-            'workshop_id': workshop_id,
-            'type': 'action_plan',
-            'content': edited_content_html
-        }, room=f'workshop_room_{workshop_id}')
-
-        # --- Return the rendered HTML list ---
-        return jsonify({"success": True, "content": edited_content_html})
-
-    except json.JSONDecodeError:
-         # If the client sent invalid JSON
-         return jsonify({"success": False, "message": "Invalid JSON format received."}), 400
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error saving edited action plan for workshop {workshop_id}: {e}")
-        return jsonify({"success": False, "message": "Server error saving edit."}), 500
 
 
 
@@ -1763,9 +1612,7 @@ def workshop_report(workshop_id):
     # TODO: Pass report data here
 
 
-# #################################################################################
-# WORKSHOP TASK MANAGEMENT ROUTES
-##################################################################################
+
 # --- Begin Workshop Introduction Task ---
 @workshop_bp.route("/<int:workshop_id>/begin_intro", methods=["POST"])
 @login_required
@@ -1852,362 +1699,126 @@ def begin_intro(workshop_id):
 
 
 
-
+# ################################################################################
+# WORKSHOP TASK MANAGEMENT
+##################################################################################
 # --- Workshop Next Task --------------
+from app.service.routes.brainstorming import get_brainstorming_task_payload
+
 @workshop_bp.route("/<int:workshop_id>/next_task", methods=["POST"])
 @login_required
 def next_task(workshop_id):
-    
-    """ This Route Handles the branching logic for the next task sequence in the workshop."""
-    
-    workshop = Workshop.query.options(
-        selectinload(Workshop.tasks) 
-    ).get_or_404(workshop_id)
-    
+    workshop = Workshop.query.get_or_404(workshop_id)
+
+    # --- Permission Check: Only Organizer ---
     if not is_organizer(workshop, current_user):
-        return jsonify({"success": False, "message": "Permission denied"}), 403
+        abort(403)
 
-    if workshop.status not in ['inprogress', 'paused']:
-         return jsonify({"success": False, "message": f"Cannot advance task when workshop status is {workshop.status}."}), 400
+    # Ensure the workshop is in progress
+    if workshop.status != "inprogress":
+        return jsonify({"error": "Workshop is not in progress."}), 400
 
-    # --- Mark previous task as completed ---
-    previous_task = None # Initialize previous_task
-    if workshop.current_task_id:
-        previous_task = BrainstormTask.query.get(workshop.current_task_id)
-        #if previous_task and previous_task.status == 'running':
-        if previous_task:
-            previous_task.status = 'completed'
-            previous_task.ended_at = datetime.utcnow()
-            previous_task.completed_at = datetime.utcnow()
-            current_app.logger.info(f"Marked previous task {previous_task.id} ({previous_task.title}) as completed.")
-            # db.session.add(previous_task) # Not strictly needed if already in session
+    # Load the task sequence
+    task_sequence = TASK_SEQUENCE
 
-    # --- Determine Next Task Type ---
-    current_index = workshop.current_task_index if workshop.current_task_index is not None else -1 # -1 for intro phase
+    if not task_sequence:
+        current_app.logger.warning(f"Task sequence is empty for workshop {workshop_id}")
+        return jsonify({"error": "No tasks in the action plan."}), 400
+
+    # Validate the current index
+    # --- FIX: Default index should be -1 before first task, so next is 0 ---
+    current_index = workshop.current_task_index if workshop.current_task_index is not None else -1
     next_index = current_index + 1
-    
-   
-   
-    # Ensure TASK_SEQUENCE is loaded correctly (assuming it's imported from app.config)
-    try:
-        if next_index >= len(TASK_SEQUENCE):
-            # --- End of Sequence ---
-            current_app.logger.info(f"Task sequence completed for workshop {workshop_id}.")
-            socketio.emit("task_sequence_complete", {"workshop_id": workshop_id}, room=f"workshop_room_{workshop_id}")
-            workshop.current_task_id = None # Clear current task
-            workshop.timer_start_time = None
-            # workshop.status = 'completed' # Or let organizer click Stop
-            db.session.commit()
-            return jsonify({"success": True, "message": "Task sequence completed."}), 200
-    except NameError:
-         current_app.logger.error("TASK_SEQUENCE not defined or imported correctly.")
-         return jsonify(success=False, message="Server configuration error: Task sequence not found."), 500
-     
-    except IndexError:
-         current_app.logger.error(f"Calculated next_index {next_index} is out of bounds for TASK_SEQUENCE (length {len(TASK_SEQUENCE)}).")
-         return jsonify(success=False, message="Server configuration error: Invalid task index."), 500
+    # --------------------------------------------------------------------
+    current_app.logger.info(f"TRACING BREAK POINT: task_sequence: {task_sequence}")
+    current_app.logger.info(f"TRACING BREAK POINT: current_index: {current_index}, next_index: {next_index}") # Log next index
 
+    if next_index >= len(task_sequence): # Check if next_index is out of bounds
+        current_app.logger.warning(f"No more tasks in the sequence for workshop {workshop_id}")
+        return jsonify({"error": "No more tasks in the action plan."}), 400
 
-    
-    try:
-        next_task_type = TASK_SEQUENCE[next_index]
-    except IndexError:
-        return jsonify(success=False, message="No more tasks in the sequence."), 400
-    
-    current_app.logger.info(f"Advancing workshop {workshop_id} to task index {next_index}: '{next_task_type}'")
-
-    # --- Branch Logic Based on Next Task Type ---
+    # Determine the next task type
+    next_task_type = task_sequence[next_index] # Use next_index
     task_payload = None
-    task_creation_function = None
-    socket_event_name = "task_ready" # Default event
-    socket_payload_modifier = lambda p: p # Default: no modification
+    task_function = None # To store the function to call
+    current_app.logger.info(f"TRACING BREAK POINT: next_task_type: {next_task_type}") # Log next index
     
     
+    
+    
+    
+    
+    # --- Map task types to functions ---
+    if next_task_type == "brainstorming":
+        task_payload = get_brainstorming_task_payload(workshop_id)
         
-    try:    
-        
-            # --- GET OVERRIDE TASK DURATION FOR DEBUGGING--- Value is specified in seconds
-            # ----------------------------------------------------------DEBUGGING ---
-            override_duration_str = current_app.config.get('DEBUG_OVERRIDE_TASK_DURATION')
-            override_duration = None
-            if override_duration_str:
-                try:
-                    override_duration = int(override_duration_str)
-                except (ValueError, TypeError):
-                    current_app.logger.error(f"[DEBUG] Invalid DEBUG_OVERRIDE_TASK_DURATION value: {override_duration_str}")
-            # ----------------------------------------------------------DEBUGGING ---
-        
-        
-        
-        
-        
-            #
-            # --- Determine if task_type is [ "brainstorming" ]---
-            #
-            if next_task_type == "brainstorming":# Brainstorming task
-                current_app.logger.debug(f"[First Task ] Brainstorming Task")
-                result = get_next_task_payload(
-                    workshop_id, 
-                    action_plan_item=None
-                    ) # Pass None or context if needed
-                
-                if isinstance(result, tuple): raise Exception(f"Task generation failed: {result[0]}")
-                
-                ## --- Set Task Payload ---
-                task_payload = result
-                
-                
-                # --- OVERRIDE TASK DURATION FOR TODO: TESTING/DEBUGGING ---
-                if override_duration is not None:
-                    original_duration = task_payload.get("task_duration")
-                    current_app.logger.warning(f"[DEBUG] Overriding {next_task_type} duration from {original_duration} to {override_duration}s")
-                    task_payload['task_duration'] = override_duration
-                 # --- END OVERRIDE TASK DURATION  TODO: REMOVE DEBUGGING ---
-                
-                # Specify the task creation function
-                task_creation_function = create_standard_task
-                
-                
-                
-                
-                
-                
-                
+    elif next_task_type == "clustering_voting":
+        # Need to fetch ideas from the previous brainstorming task first
+        previous_task_id = workshop.current_task_id
+        if not previous_task_id:
+             return jsonify({"error": "Cannot start clustering/voting without a completed brainstorming task."}), 400
+        ideas = BrainstormIdea.query.filter_by(task_id=previous_task_id).all()
+        if not ideas:
+             return jsonify({"error": "No ideas found from the previous task to cluster."}), 400
+        # Pass ideas to the generator function
+        task_payload = '' # generate_clusters_and_voting_task(workshop_id, ideas) # Call directly for now
+        # Note: This assumes generate_clusters_and_voting_task handles DB saving & returns payload or error tuple
+    elif next_task_type == "results_feasibility":
+         # Need to fetch clusters and votes from the previous task
+        task_payload = '' # workshop.current_task_id # Assuming the voting task updates current_task_id
+        if not previous_task_id:
+             return jsonify({"error": "Cannot start feasibility without a completed voting task."}), 400
+        # Fetch clusters associated with the workshop (or task if linked) including vote counts
+        clusters_with_votes = IdeaCluster.query.filter_by(workshop_id=workshop_id).options(selectinload(IdeaCluster.votes)).all() # Adjust filter if needed
+        if not clusters_with_votes:
+             return jsonify({"error": "No clusters found from the previous task."}), 400
+        #task_payload = generate_feasibility_task(workshop_id, clusters_with_votes) # Call directly
+    elif next_task_type == "discussion":
+        task_payload = '' #  generate_discussion_task(workshop_id) # Call directly
+    elif next_task_type == "summary":
+        task_payload = '' #  = generate_summary_task(workshop_id) # Call directly
+    else:
+        return jsonify({"error": f"Unsupported task type: {next_task_type}"}), 400
+    # -----------------------------------
 
+    # --- Call the selected function if not already called ---
+    if task_function:
+        task_payload = task_function(workshop_id)
+    # ------------------------------------------------------
 
+    # Handle errors from the task generation function
+    if isinstance(task_payload, tuple):
+        error_message, status_code = task_payload
+        return jsonify({"error": error_message}), status_code
 
+    # --- Determine Emitter based on task_type ---
+    room = f"workshop_room_{workshop_id}"
+    task_type_in_payload = task_payload.get("task_type")
 
+    if task_type_in_payload == "brainstorming":
+        emit_task_ready(room, task_payload)
+    elif task_type_in_payload == "clustering_voting":
+        emit_clusters_ready(room, task_payload) # Use specific emitter
+    elif task_type_in_payload == "results_feasibility":
+        emit_feasibility_ready(room, task_payload) # Use specific emitter
+    elif task_type_in_payload == "discussion":
+        emit_task_ready(room, task_payload) # Re-use generic task emitter? Or create specific?
+    elif task_type_in_payload == "summary":
+        emit_summary_ready(room, task_payload) # Use specific emitter
+    else:
+        current_app.logger.error(f"Unknown task type '{task_type_in_payload}' in payload for workshop {workshop_id}")
+        return jsonify({"error": "Internal error: Unknown task type generated."}), 500
+    # ------------------------------------------
 
+    # Update the workshop's current task index *after* successful generation and emission
+    workshop.current_task_index = next_index # Update to the index of the task just started
+    # The task_payload should contain the new task_id, which was set in get_brainstorming_task_payload
+    # For other task types, ensure their respective functions also update workshop.current_task_id
+    # workshop.current_task_id = task_payload.get('task_id') # This is handled within the task generation functions now
 
-            elif next_task_type == "clustering_voting":
-                # Find the *previous* brainstorming task to get ideas
-                brainstorming_task = None
-                if current_index >= 0 and TASK_SEQUENCE[current_index] == "brainstorming" and workshop.current_task_id:
-                    # Assuming the just completed task was brainstorming
-                    brainstorming_task = previous_task # Use the task just marked completed
-                else:
-                    # Fallback: Find the most recent completed brainstorming task
-                    brainstorming_task = BrainstormTask.query.filter_by(
-                        workshop_id=workshop_id, status='completed'
-                    ).order_by(BrainstormTask.ended_at.desc()).first() # Simplistic, might need better logic
+    db.session.commit()
 
-                if not brainstorming_task:
-                    raise Exception("Could not find previous brainstorming task for clustering.")
-
-                ideas = brainstorming_task.ideas.all()
-                if not ideas:
-                    current_app.logger.warning(f"No ideas found in task {brainstorming_task.id} for clustering.")
-                    # Decide: Skip clustering or proceed with empty? Let's skip for now.
-                    # This logic could be improved to handle skipping gracefully.
-                    # For now, treat as error.
-                    raise Exception("No ideas submitted in the brainstorming phase to cluster.")
-
-                # Call NEW service function
-                result = generate_clusters_and_voting_task(workshop_id, ideas)
-                if isinstance(result, tuple): raise Exception(f"Clustering failed: {result[0]}")
-                task_payload = result # This payload should include cluster data
-                
-                
-                
-                
-                
-                # --- INTERCEPTION DURATION OVERRIDE FOR DEBUGGING ---
-                if override_duration is not None:
-                    original_duration = task_payload.get("task_duration")
-                    current_app.logger.warning(f"[DEBUG] Overriding {next_task_type} duration from {original_duration} to {override_duration}s")
-                    task_payload['task_duration'] = override_duration
-                # --- END INTERCEPTION DURATION OVERRIDE FOR DEBUGGING ---
-                
-                
-                
-                
-                
-                
-                
-                
-                task_creation_function = create_clustering_task # Special function to save clusters
-                socket_event_name = "clusters_ready"
-                # Modify payload for socket: include participant dots
-                def modify_payload(p):
-                    participants_data = WorkshopParticipant.query.filter_by(workshop_id=workshop_id, status='accepted').all()
-                    p['participants_dots'] = {part.user_id: part.dots_remaining for part in participants_data}
-                    return p
-                socket_payload_modifier = modify_payload
-
-
-            elif next_task_type == "results_feasibility":
-                # Find the *previous* clustering/voting task
-                voting_task = None
-                if current_index >= 0 and TASK_SEQUENCE[current_index] == "clustering_voting" and workshop.current_task_id:
-                    voting_task = previous_task
-                else:
-                    # Fallback: Find most recent completed voting task
-                    # This requires identifying voting tasks, maybe by title or a new 'type' field in BrainstormTask
-                    voting_task = BrainstormTask.query.filter(
-                        BrainstormTask.workshop_id == workshop_id,
-                        BrainstormTask.status == 'completed',
-                        # Add a condition here if you add a task type field, e.g., BrainstormTask.type == 'voting'
-                        BrainstormTask.title.like('%Voting%') # Example heuristic
-                    ).order_by(BrainstormTask.ended_at.desc()).first()
-
-                if not voting_task:
-                    raise Exception("Could not find previous voting task for feasibility analysis.")
-
-                # Fetch clusters and votes associated with *that* voting task
-                clusters_with_votes = IdeaCluster.query.filter_by(task_id=voting_task.id).all() # Removed subqueryload for dynamic 'votes'
-
-                if not clusters_with_votes:
-                    raise Exception("No clusters found from the voting phase.")
-
-                # Call NEW service function
-                result = generate_feasibility_task(workshop_id, clusters_with_votes)
-                if isinstance(result, tuple): raise Exception(f"Feasibility analysis failed: {result[0]}")
-                task_payload = result # Payload should contain the feasibility report
-                task_creation_function = create_standard_task # Store report in prompt
-                socket_event_name = "feasibility_ready"
-
-            elif next_task_type == "discussion":
-                # Call service function (can reuse generate_next_task_text or create specific one)
-                result = generate_discussion_task(workshop_id) # Needs creation
-                if isinstance(result, tuple): raise Exception(f"Discussion task generation failed: {result[0]}")
-                task_payload = result
-                task_creation_function = create_standard_task
-                # socket_event_name = "task_ready" (default)
-
-            elif next_task_type == "summary":
-                # Call NEW service function
-                result = generate_summary_task(workshop_id) # Needs creation
-                if isinstance(result, tuple): raise Exception(f"Summary generation failed: {result[0]}")
-                task_payload = result # Payload contains the summary
-                task_creation_function = create_standard_task
-                socket_event_name = "summary_ready"
-
-            else:
-                raise Exception(f"Unknown task type: {next_task_type}")
-
-            # --- Persist the New Task using the selected function ---
-            if not task_creation_function or not task_payload:
-                raise Exception("Task payload or creation function missing.")
-
-            new_task = task_creation_function(workshop, task_payload)
-            if not new_task: # Check if task creation failed
-                raise Exception("Failed to create the new task object.")
-
-            # --- Update Workshop State ---
-            workshop.current_task_id = new_task.id
-            workshop.timer_start_time = new_task.started_at
-            workshop.timer_paused_at = None
-            workshop.timer_elapsed_before_pause = 0
-            workshop.current_task_index = next_index # Update index
-
-            if workshop.status == 'paused': # Resume if paused
-                workshop.status = 'inprogress'
-
-            db.session.commit()
-            current_app.logger.info(f"Started new task {new_task.id} ({next_task_type}) for workshop {workshop_id}. Index: {next_index}")
-
-            # --- Broadcast Task to Clients ---
-            # Prepare payload for the socket event
-            event_payload = {
-                "task_id":   new_task.id,
-                "title":     task_payload.get("title", new_task.title),
-                "duration":  new_task.duration,
-                "task_type": next_task_type, # Explicitly include the type
-                # Add specific data based on type
-                **task_payload # Include all generated data (prompt, clusters, report, etc.)
-            }
-
-            # Apply any specific modifications (like adding participant dots for voting)
-            final_event_payload = socket_payload_modifier(event_payload)
-
-            # Use the determined socket event name
-            socketio.emit(socket_event_name, final_event_payload, room=f"workshop_room_{workshop_id}")
-            current_app.logger.info(f"Emitted '{socket_event_name}' for task {new_task.id}")
-
-            return jsonify({"success": True}), 200
-
-    except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error advancing to next task ({next_task_type}) for {workshop_id}: {e}", exc_info=True)
-            # Try to restore previous task state if possible? Difficult. Best to report error.
-            # workshop.current_task_index = current_index # Revert index?
-            # db.session.commit()
-            return jsonify(success=False, message=f"Error starting next task: {e}"), 500
-
-
-# --- Helper functions for task creation ---
-
-def create_standard_task(workshop, payload):
-    """Creates a standard BrainstormTask."""
-    try:
-        duration_seconds = int(payload.get("task_duration", 180)) # Default duration
-    except (ValueError, TypeError):
-        duration_seconds = 180
-        current_app.logger.warning(f"Invalid task_duration '{payload.get('task_duration')}', defaulting to 180s.")
-
-    task = BrainstormTask(
-        workshop_id=workshop.id,
-        title=payload.get("title", "Workshop Task"),
-        prompt=json.dumps(payload), # Store full payload
-        duration=duration_seconds,
-        status="running",
-        started_at=datetime.utcnow()
-        # Add 'type' field if you add it to the model: type=payload.get("task_type")
-    )
-    db.session.add(task)
-    db.session.flush() # Get ID before returning
-    return task
-
-
-
-
-
-
-
-
-
-
-
-def create_clustering_task(workshop, payload):
-    """Creates a task and associated IdeaCluster records."""
-    # First, create the task itself
-    task = create_standard_task(workshop, payload)
-    if not task: return None # Handle error from standard creation
-
-    clusters_data = payload.get("clusters", []) # Expecting list of cluster dicts from LLM
-    if not clusters_data:
-        current_app.logger.warning(f"No cluster data found in payload for task {task.id}")
-        # Decide if task should still be created without clusters? For now, yes.
-        return task
-
-    # Create IdeaCluster records and link ideas
-    ideas_map = {idea.id: idea for idea in BrainstormIdea.query.filter(BrainstormIdea.id.in_(payload.get("idea_ids", []))).all()}
-
-    for cluster_info in clusters_data:
-        cluster_name = cluster_info.get("name", "Unnamed Cluster")
-        cluster_desc = cluster_info.get("description")
-        idea_ids_in_cluster = cluster_info.get("idea_ids", [])
-
-        cluster = IdeaCluster(
-            task_id=task.id, # Link cluster to the *voting* task
-            name=cluster_name,
-            description=cluster_desc
-        )
-        db.session.add(cluster)
-        db.session.flush() # Get cluster ID
-
-        # Link ideas to this cluster
-        for idea_id in idea_ids_in_cluster:
-            idea = ideas_map.get(idea_id)
-            if idea:
-                idea.cluster_id = cluster.id
-                # db.session.add(idea) # Add idea if it wasn't already in session
-
-    # Note: Commit happens in the main /next_task route after all updates
-    return task
-
-
-
+    return jsonify({"success": True, "task": task_payload})
 
 @workshop_bp.route("/<int:workshop_id>/submit_idea", methods=["POST"])
 @login_required
