@@ -82,7 +82,6 @@ from app.utils.data_aggregation import aggregate_pre_workshop_data
 from app.service.routes.agent import extract_json_block 
 
 from app.service.routes.agent import (
-    generate_introduction_text,
     generate_next_task_text, # Keep for brainstorming/discussion prompts
     # --- ADD NEW SERVICE IMPORTS ---
     generate_clusters_and_voting_task, # Needs to be created
@@ -1835,10 +1834,11 @@ def begin_intro(workshop_id):
         workshop.timer_start_time = intro_task.started_at # Use task start time
         workshop.timer_paused_at = None
         workshop.timer_elapsed_before_pause = 0
-        workshop.current_task_index = -1 # Indicate intro task is before index 0 of action plan
+        workshop.current_task_index = -1 # Indicate intro task is before index 0
 
         db.session.commit()
 
+        
         payload['task_id'] = intro_task.id # Add task ID to payload for client
         payload['duration'] = intro_task.duration # Ensure duration is correct
 
@@ -1847,8 +1847,8 @@ def begin_intro(workshop_id):
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error creating/starting intro task for {workshop_id}: {e}", exc_info=True)
-        return jsonify(success=False, message="Error starting introduction task."), 500
+        current_app.logger.error(f"Error creating welcome and warm-up task for {workshop_id}: {e}", exc_info=True)
+        return jsonify(success=False, message="Server error starting introduction. /begin-into"), 500
 
 
 
@@ -1857,8 +1857,11 @@ def begin_intro(workshop_id):
 @workshop_bp.route("/<int:workshop_id>/next_task", methods=["POST"])
 @login_required
 def next_task(workshop_id):
+    
+    """ This Route Handles the branching logic for the next task sequence in the workshop."""
+    
     workshop = Workshop.query.options(
-        selectinload(Workshop.tasks) #.selectinload(BrainstormTask.ideas) # Load tasks and their ideas
+        selectinload(Workshop.tasks) 
     ).get_or_404(workshop_id)
     
     if not is_organizer(workshop, current_user):
@@ -1871,9 +1874,11 @@ def next_task(workshop_id):
     previous_task = None # Initialize previous_task
     if workshop.current_task_id:
         previous_task = BrainstormTask.query.get(workshop.current_task_id)
-        if previous_task and previous_task.status == 'running':
+        #if previous_task and previous_task.status == 'running':
+        if previous_task:
             previous_task.status = 'completed'
             previous_task.ended_at = datetime.utcnow()
+            previous_task.completed_at = datetime.utcnow()
             current_app.logger.info(f"Marked previous task {previous_task.id} ({previous_task.title}) as completed.")
             # db.session.add(previous_task) # Not strictly needed if already in session
 
@@ -1881,6 +1886,8 @@ def next_task(workshop_id):
     current_index = workshop.current_task_index if workshop.current_task_index is not None else -1 # -1 for intro phase
     next_index = current_index + 1
     
+   
+   
     # Ensure TASK_SEQUENCE is loaded correctly (assuming it's imported from app.config)
     try:
         if next_index >= len(TASK_SEQUENCE):
@@ -1895,13 +1902,18 @@ def next_task(workshop_id):
     except NameError:
          current_app.logger.error("TASK_SEQUENCE not defined or imported correctly.")
          return jsonify(success=False, message="Server configuration error: Task sequence not found."), 500
+     
     except IndexError:
          current_app.logger.error(f"Calculated next_index {next_index} is out of bounds for TASK_SEQUENCE (length {len(TASK_SEQUENCE)}).")
          return jsonify(success=False, message="Server configuration error: Invalid task index."), 500
 
 
     
-    next_task_type = TASK_SEQUENCE[next_index]
+    try:
+        next_task_type = TASK_SEQUENCE[next_index]
+    except IndexError:
+        return jsonify(success=False, message="No more tasks in the sequence."), 400
+    
     current_app.logger.info(f"Advancing workshop {workshop_id} to task index {next_index}: '{next_task_type}'")
 
     # --- Branch Logic Based on Next Task Type ---
@@ -1911,14 +1923,10 @@ def next_task(workshop_id):
     socket_payload_modifier = lambda p: p # Default: no modification
     
     
-    
-    
-    
-        
         
     try:    
         
-            # --- Get Override Value ---
+            # --- Get Override Task Duration for Debugging --- Value ---
             override_duration_str = current_app.config.get('DEBUG_OVERRIDE_TASK_DURATION')
             override_duration = None
             if override_duration_str:
@@ -1926,28 +1934,11 @@ def next_task(workshop_id):
                     override_duration = int(override_duration_str)
                 except (ValueError, TypeError):
                     current_app.logger.error(f"[DEBUG] Invalid DEBUG_OVERRIDE_TASK_DURATION value: {override_duration_str}")
-            # --------------------------
+            # ----------------------------------------------------------DEBUGGING ---
         
 
-            if next_task_type == "warm-up":
-                result = get_next_task_payload(workshop_id, action_plan_item=None) # Pass context if needed
-                if isinstance(result, tuple): raise Exception(f"Warm-up task generation failed: {result[0]}")
-                task_payload = result
-                
-                # --- INTERCEPTION DURATION OVERRIDE FOR DEBUGGING ---
-                if override_duration is not None:
-                    original_duration = task_payload.get("task_duration")
-                    current_app.logger.warning(f"[DEBUG] Overriding {next_task_type} duration from {original_duration} to {override_duration}s")
-                    task_payload['task_duration'] = override_duration
-                 # --- END INTERCEPTION DURATION OVERRIDE FOR DEBUGGING ---
-                
-                
-                
-                task_creation_function = create_standard_task
-                # socket_event_name = "task_ready" # Default is fine
-                
-            elif next_task_type == "brainstorming":
-                # Use existing service/agent function for generating a prompt
+            # --- Determine if task is brainstorming ---
+            if next_task_type == "brainstorming":
                 result = get_next_task_payload(workshop_id, action_plan_item=None) # Pass None or context if needed
                 if isinstance(result, tuple): raise Exception(f"Task generation failed: {result[0]}")
                 task_payload = result
@@ -2038,9 +2029,7 @@ def next_task(workshop_id):
                     raise Exception("Could not find previous voting task for feasibility analysis.")
 
                 # Fetch clusters and votes associated with *that* voting task
-                clusters_with_votes = IdeaCluster.query.options(
-                    subqueryload(IdeaCluster.votes) # Use subqueryload instead of selectin
-                ).filter_by(task_id=voting_task.id).all()
+                clusters_with_votes = IdeaCluster.query.filter_by(task_id=voting_task.id).all() # Removed subqueryload for dynamic 'votes'
 
                 if not clusters_with_votes:
                     raise Exception("No clusters found from the voting phase.")

@@ -174,92 +174,6 @@ def generate_action_plan(workshop_id):
 
 
 
-# #-----------------------------------------------------------
-# # 1.b Generate workshop introduction
-@agent_bp.route("/generate_introduction_text/<int:workshop_id>", methods=["POST"])
-@login_required
-def generate_introduction_text(workshop_id):
-    """
-    Uses the same pre-workshop data + existing rules/agenda to craft:
-     - a welcome
-     - statement of objectives
-     - reinforcement of rules
-     - launch instructions for Task #1
-    """
-    # Aggregate pre-workshop data
-    pre_workshop_data = aggregate_pre_workshop_data(workshop_id)
-    if not pre_workshop_data:
-        # Return raw text directly as the route seems to expect it based on usage
-        return "Could not generate introduction: Workshop data unavailable.", 404
-    
-    # Define prompt template for generating introduction
-    introduction_prompt_template = """
-    You are the workshop facilitator. Based *only* on the workshop context below, craft:
-     1) A warm welcome,
-     2) A reminder of the goals & rules,
-     3) A clear instruction for the first warm-up brainstorming question.
-
-    Workshop Context:
-    {pre_workshop_data}
-
-    Generate output as valid JSON object with the keys:
-    - welcome: A warm welcome message. (< 30 words)
-    - goals: A statement of the workshop's goals.
-    - rules: A reminder of the workshop rules.
-    - instructions: Clear instructions for the warm-up brainstorming question to warm participants up.
-    - task: The first warm-up brainstorming question.
-    - task_type: The type of task is 'warm-up'.
-    - task_duration: The time allocated for the task in seconds. (e.g., 60 for 1 minute).
-    - task_description: A brief description of the task. (< 25 words)
-    """
-    
-    # Instantiate the Watsonx LLM with the specified model and parameters
-    watsonx_llm_introduction = WatsonxLLM(
-        model_id="ibm/granite-3-3-8b-instruct",
-        url=Config.WATSONX_URL,
-        project_id=Config.WATSONX_PROJECT_ID,
-        apikey=Config.WATSONX_API_KEY,
-        params={
-                "decoding_method":"greedy",
-                "max_new_tokens":300,
-                "min_new_tokens":50,
-                "temperature":1.7,
-                "top_k":40,
-                "top_p":0.7
-                }
-    )
-
-    # Build prompt and LLM chain
-    introduction_prompt = PromptTemplate.from_template(introduction_prompt_template)
-    # Define the chain
-    chain = introduction_prompt | watsonx_llm_introduction
-    # Generate introduction
-    # Note: The prompt template should be designed to ensure the output is in valid JSON format.
-    # If the model outputs JSON, you can parse it directly.
-    try:
-        raw_introduction = chain.invoke({"pre_workshop_data": pre_workshop_data})
-        print(f"[Agent] Workshop raw introduction for {workshop_id}: {raw_introduction}") # DEBUG CODE
-
-      
-
-        return raw_introduction # Return the raw LLM output directly for now
-
-    except Exception as e:
-        # Catch potential errors during LLM invocation
-        print(f"[Agent] Error invoking LLM chain for workshop {workshop_id}: {e}")
-        # You might want to return a more specific error message to the client
-        return f"Error generating introduction: {e}", 500
-
-# Optional: API endpoint
-@agent_bp.route("/generate_introduction/<int:workshop_id>", methods=["POST"])
-@login_required
-def generate_introduction(workshop_id):
-    """API endpoint to generate and return an agenda."""
-    introduction_text = generate_introduction_text(workshop_id)
-    if "Could not generate introduction" in introduction_text:
-        return jsonify({"error": introduction_text}), 404
-    return jsonify({"introduction": introduction_text}), 200
-
 
 
 # #-----------------------------------------------------------
@@ -666,7 +580,7 @@ def generate_clusters_and_voting_task(workshop_id: int, ideas: list):
         "task_type": "clustering_voting",
         "description": "Ideas have been grouped. Please vote on the clusters.",
         "instructions": "Use your dots to vote for the clusters you find most promising. Click a cluster's vote button.",
-        "task_duration": 300, # 5 minutes example
+        "task_duration": 30, # Use 300 for 5 minutes example
         "clusters": [
             {"id": 1, "name": "Cluster A (Placeholder)", "description": "Related to topic X", "idea_ids": [idea.id for idea in ideas[:len(ideas)//2]]},
             {"id": 2, "name": "Cluster B (Placeholder)", "description": "Related to topic Y", "idea_ids": [idea.id for idea in ideas[len(ideas)//2:]]}
@@ -688,7 +602,7 @@ def generate_feasibility_task(workshop_id: int, clusters_with_votes: list):
     # Example structure:
     report_content = "## Feasibility Analysis (Placeholder)\n\n"
     for cluster in clusters_with_votes:
-        vote_count = len(cluster.votes) # Calculate vote count
+        vote_count = cluster.votes.count() # Calculate vote count using .count() for dynamic relationship
         report_content += f"- **{cluster.name}** (Votes: {vote_count}): Seems feasible, requires resources X and Y.\n"
 
     example_payload = {
@@ -696,7 +610,7 @@ def generate_feasibility_task(workshop_id: int, clusters_with_votes: list):
         "task_type": "results_feasibility",
         "description": "Review the feasibility analysis of the top-voted clusters.",
         "instructions": "Read the report below and prepare for discussion.",
-        "task_duration": 240, # 4 minutes example
+        "task_duration": 15, # 240 for 4 minutes example
         "feasibility_report": report_content # Include the generated report
     }
     return example_payload
@@ -715,7 +629,7 @@ def generate_discussion_task(workshop_id: int):
         "task_type": "discussion",
         "description": "Let's discuss the feasibility findings and next steps.",
         "instructions": "Share your thoughts and questions in the chat.",
-        "task_duration": 600 # 10 minutes example
+        "task_duration": 15 # 600 for 10 minutes example
     }
     return example_payload
     # On error, return a tuple: return ("Error message", 500)
@@ -734,7 +648,7 @@ def generate_summary_task(workshop_id: int):
         "task_type": "summary",
         "description": "Here is a summary of the workshop.",
         "instructions": "Thank you for your participation!",
-        "task_duration": 120, # 2 minutes example
+        "task_duration": 15, # 120 for 2 minutes example
         "summary_report": summary_content # Include the generated summary
     }
     return example_payload

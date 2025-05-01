@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 # --- ADD TASK SEQUENCE HERE ---
 TASK_SEQUENCE = [
-    "warm-up",            # Index 0 (Handled by begin_intro)
+    #"warm-up",           # Index 0 (Handled by begin_intro)
     "brainstorming",      # Index 1
     "clustering_voting",  # Index 2
     "results_feasibility",# Index 3

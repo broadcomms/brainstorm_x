@@ -348,9 +348,7 @@ def _on_join_room(data):
                  # For voting phase, whiteboard shows clusters, not individual ideas
                  # The cluster data is already in the 'clusters_ready' payload.
                  # We might need to emit vote counts separately if not included initially.
-                 clusters_with_votes = IdeaCluster.query.options(
-                     selectinload(IdeaCluster.votes)
-                 ).filter_by(task_id=task.id).all()
+                 clusters_with_votes = IdeaCluster.query.filter_by(task_id=task.id).all() # Removed selectinload for dynamic 'votes'
                  votes_payload = {
                      cluster.id: len(cluster.votes) for cluster in clusters_with_votes
                  }

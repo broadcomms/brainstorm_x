@@ -64,7 +64,14 @@
       <div class="d-flex justify-content-between align-items-center mb-3">
         <div> {# Organizer Controls #}
           {% if is_organizer_flag %}
-            <form id="begin-intro-form" class="d-inline me-2" action="{{ url_for('workshop_bp.begin_intro', workshop_id=workshop.id) }}" method="POST" style="display: none;"> {# Hidden initially #}
+            <form 
+                id="begin-intro-form" 
+                class="d-inline me-2" 
+                action="{{ url_for('workshop_bp.begin_intro', workshop_id=workshop.id) }}" 
+                method="POST" 
+                style="display: none;"> {# Hidden initially #}
+
+
               <button type="submit" class="btn btn-sm btn-info">Begin Workshop</button>
             </form>
             <button id="next-task-btn" class="btn btn-sm btn-secondary" disabled>Next Task</button> {# Disabled initially #}
@@ -916,90 +923,81 @@
           });
       });
 
-      // --- MODIFIED: Begin Introduction Form (Organizer only) ---
-      if (elements.beginIntroForm) {
-        elements.beginIntroForm.addEventListener('submit', async (e) => {
-          console.log("Begin Intro form submitted. Preventing default action.");
-          e.preventDefault(); // Explicitly prevent default form submission
+    // -- Begin Intro Form --
+    // Ensure the form exists before attaching the event listener
+    if (elements.beginIntroForm) {
+      elements.beginIntroForm.addEventListener('submit', async (e) => {
+        console.log("Begin Intro form submitted. Preventing default action.");
+        e.preventDefault(); // Prevent default form submission
 
-          const form = e.target;
-          const button = form.querySelector('button[type="submit"]');
-          if (!button) {
-              console.error("Submit button not found in begin-intro-form");
-              return; // Stop if button isn't found
-          }
+        const form = e.target;
+        const button = form.querySelector('button[type="submit"]');
+        if (!button) {
+          console.error("Submit button not found in begin-intro-form");
+          return; // Stop if button isn't found
+        }
 
-          button.disabled = true;
-          button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting...';
 
-          try {
-            const response = await fetch(form.action, {
-              method: 'POST',
-              headers: {
-                  'X-Requested-With': 'XMLHttpRequest', // Helps Flask detect AJAX
-                  'Accept': 'application/json'         // Indicate we prefer JSON response
-               },
-              // No body needed if the route doesn't expect form data,
-              // but FormData() is fine if you add fields later.
-              // body: new FormData(form),
-            });
+        try {
+          const response = await fetch(form.action, {
+            method: 'POST',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest', // Helps Flask detect AJAX
+              'Accept': 'application/json'         // Indicate we prefer JSON response
+            },
+          });
 
-            // Check if response is ok and content type is JSON before parsing
-            const contentType = response.headers.get("content-type");
-            if (response.ok && contentType && contentType.includes("application/json")) {
-                const data = await response.json();
-                if (data.success) {
-                    console.log("Workshop introduction POST successful. Waiting for socket event.");
-                    // SUCCESS: DO NOTHING HERE.
-                    // Rely entirely on the 'introduction_start' socket event
-                    // to update the UI and start the timer.
-                } else {
-                    // Server returned JSON but indicated failure
-                    throw new Error(data.message || 'Failed to start introduction (server error).');
-                }
-            } else if (!response.ok) {
-                 // Handle non-JSON errors (like 404, 500 without JSON body)
-                 const errorText = await response.text(); // Try to get error text
-                 console.error(`HTTP error ${response.status}: ${errorText}`);
-                 throw new Error(`HTTP error ${response.status}`);
+          // Check if response is ok and content type is JSON before parsing
+          const contentType = response.headers.get("content-type");
+          if (response.ok && contentType && contentType.includes("application/json")) {
+            const data = await response.json();
+            if (data.success) {
+              console.log("Workshop introduction POST successful. Waiting for socket event.");
+            // SUCCESS: Stop the spinner and update button text
+              button.innerHTML = 'Workshop Started'; // Update button text
+              button.disabled = true; // Disable start button since workshop has started
+              // TODO: Enable/disable other buttons based on workshop state
             } else {
-                // Handle unexpected success response that isn't JSON
-                console.warn("Received non-JSON success response for begin_intro.");
-                // Still rely on socket event, but log this oddity.
+              // Server returned JSON but indicated failure
+              throw new Error(data.message || 'Failed to start introduction (server error).');
             }
+          } else if (!response.ok) {
+            // Handle non-JSON errors (like 404, 500 without JSON body)
+            const errorText = await response.text(); // Try to get error text
+            console.error(`HTTP error ${response.status}: ${errorText}`);
+            throw new Error(`HTTP error ${response.status}`);
+          } else {
+            // Handle unexpected success response that isn't JSON
+            console.warn("Received non-JSON success response for begin_intro.");
+            // Still rely on socket event, but log this oddity.
+          }
 
-          } catch (err) {
-            console.error("Begin Intro Error:", err);
-            alert('Error starting workshop: ' + err.message);
-            // Re-enable button ONLY on error
-            button.disabled = false;
-            button.innerHTML = 'Begin Workshop';
-          }
-          // NOTE: No 'finally' block to re-enable button here.
-          // On success, the button should be hidden by the UI update
-          // triggered by the 'introduction_start' socket event.
-        });
-        console.log("Attached submit listener to #begin-intro-form"); // Confirm listener attachment
-      } else {
-          // Log if the form isn't found on page load (e.g., if user is not organizer)
-          if (isOrganizer) { // Only log if organizer *should* see the button
-             console.log("#begin-intro-form not found on page load, but expected for organizer.");
-          }
+        } catch (err) {
+          console.error("Begin Intro Error:", err);
+          alert('Error starting workshop: ' + err.message);
+          // Re-enable button ONLY on error
+          button.disabled = false;
+          button.innerHTML = 'Begin Workshop';
+        }
+        // NOTE: No 'finally' block to re-enable button here.
+        // On success, the button should be hidden by the UI update
+        // triggered by the 'introduction_start' socket event.
+      });
+      console.log("Attached submit listener to #begin-intro-form"); // Confirm listener attachment
+    } else {
+      // Log if the form isn't found on page load (e.g., if user is not organizer)
+      if (isOrganizer) { // Only log if organizer *should* see the button
+        console.log("#begin-intro-form not found on page load, but expected for organizer.");
       }
+    }
 
-
-
-
-
-
-
-      
-
-    // Next Task Button (Organizer only)
+  // Next Task Button (Organizer only)
  // --- Next Task Button Listener ---
  if (elements.nextTaskBtn) {
           elements.nextTaskBtn.addEventListener('click', async () => {
-              console.log("Next Task button clicked.");
+              console.log("[ Next Task ] Next task button clicked.");
               if (!isOrganizer) return; // Should be disabled anyway, but double-check
 
               elements.nextTaskBtn.disabled = true;
@@ -1018,31 +1016,31 @@
                   if (response.ok && contentType && contentType.includes("application/json")) {
                       const data = await response.json();
                       if (data.success) {
-                          console.log("Next task request successful. Waiting for 'task_ready' event.");
+                        console.log("[ Next Task ] Next task started successfully. waiting for task_ready event...");
                           // SUCCESS: DO NOTHING HERE. UI updates via 'task_ready' socket event.
                           // Button remains disabled until timer ends for the *new* task.
                       } else {
-                           throw new Error(data.message || 'Failed to start next task (server error).');
+                           throw new Error(data.message || '[ Next Task ] Failed to start next task (server error).');
                       }
                   } else if (!response.ok) {
                       const errorText = await response.text();
-                      console.error(`HTTP error ${response.status} requesting next task: ${errorText}`);
-                      throw new Error(`HTTP error ${response.status}`);
+                      console.error(`[ Next Task ] HTTP error ${response.status} requesting next task: ${errorText}`);
+                      throw new Error(`[ Next Task ] HTTP error ${response.status}`);
                   } else {
-                      console.warn("Received non-JSON success response for next_task.");
+                      console.warn("[ Next Task ] Received non-JSON success response for next_task.");
                   }
               } catch (err) {
-                  console.error("Next Task Error:", err);
-                  alert('Error starting next task: ' + err.message);
+                  console.error("[ Next Task ] Error:", err);
+                  alert('[ Next Task ] Error starting next task service: ' + err.message);
                   // Re-enable button ONLY on error
                   elements.nextTaskBtn.disabled = false;
                   elements.nextTaskBtn.innerHTML = 'Next Task';
               }
               // NOTE: No 'finally' block. Button state is managed by timer end and task start.
           });
-          console.log("Attached click listener to #next-task-btn");
+          console.log("[ Next Task ] Attached click listener to UI Button: #next-task-btn");
       } else if (isOrganizer) {
-          console.log("#next-task-btn not found, but expected for organizer.");
+          console.log("[ Next Task ] UI Button (#next-task-btn) not found. Expected for organizer.");
       }
 
 
@@ -1050,9 +1048,9 @@
       // ... (keep beforeunload listener) ...
 
       // --- Initial UI setup ---
-      console.log("DOM Content Loaded. Initializing UI.");
+      console.log("[ Init ] DOM Content Loaded. Initializing UI.");
       updateWorkshopStatusUI(workshopStatus);
-      console.log(`Initial state: Task ID = ${currentTaskId}, Status = ${workshopStatus}`);
+      console.log(`[ Init ] Initial state: Task ID = ${currentTaskId}, Status = ${workshopStatus}`);
       // The join_room logic in sockets.py should emit necessary events (task, timer, whiteboard)
       // to populate the initial state if a task is already active.
 

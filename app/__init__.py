@@ -1,6 +1,7 @@
 # app/__init__.py
 import os
 import sqlite3
+
 import markdown
 from flask import Flask
 from flask_cors import CORS
