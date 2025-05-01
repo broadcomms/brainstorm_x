@@ -2,6 +2,19 @@
 import os
 from dotenv import load_dotenv
 
+
+
+# --- ADD TASK SEQUENCE HERE ---
+TASK_SEQUENCE = [
+    "warm-up",            # Index 0 (Handled by begin_intro)
+    "brainstorming",      # Index 1
+    "clustering_voting",  # Index 2
+    "results_feasibility",# Index 3
+    "discussion",         # Index 4
+    "summary"             # Index 5
+]
+# -----------------------------
+
 class Config:
     # General environmental details
     APP_NAME = os.environ.get("APP_NAME", "BrainStormX")
@@ -29,3 +42,7 @@ class Config:
     MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "no-reply@broadcomms.net")
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "5i-8v@S4y$Y?")
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "no-reply@broadcomms.net")
+    
+    # Set to a number (string) of seconds to override task duration, or None/empty to disable
+    DEBUG_OVERRIDE_TASK_DURATION = "15" # Example: Override all tasks to 15 seconds
+    # DEBUG_OVERRIDE_TASK_DURATION = None # Disable override

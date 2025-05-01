@@ -14,10 +14,11 @@ from flask_socketio import emit, join_room, leave_room
 
 # --- ADD THIS IMPORT ---
 from sqlalchemy.orm import selectinload
+from .config import TASK_SEQUENCE # <-- ADD THIS IMPORT
 
 from .extensions import socketio, db
-from .models import User, Workshop, WorkshopParticipant, ChatMessage, BrainstormTask, BrainstormIdea
-
+from .models import User, Workshop, WorkshopParticipant, ChatMessage, BrainstormTask, BrainstormIdea, IdeaCluster, IdeaVote # Add Cluster/Vote
+from sqlalchemy import func # For counting votes
 # ---------------------------------------------------------------------------
 # In‑memory presence tracking
 # ---------------------------------------------------------------------------
@@ -72,6 +73,126 @@ def _broadcast_participant_list(room: str, workshop_id: int):
         )
 
 
+# --- ADDED: Voting Handler ---
+@socketio.on('submit_vote')
+def _on_submit_vote(data):
+    """Handles a user casting or retracting a vote for a cluster."""
+    room = data.get("room") # e.g., workshop_room_123
+    cluster_id = data.get("cluster_id")
+    user_id = data.get("user_id")
+    workshop_id = data.get("workshop_id")
+    # action = data.get("action", "increment") # 'increment' or 'decrement'
+
+    if not all([room, cluster_id, user_id, workshop_id]):
+        current_app.logger.warning(f"submit_vote incomplete data: {data}")
+        emit("vote_error", {"message": "Invalid vote data."}, to=request.sid)
+        return
+
+    # --- Validation ---
+    workshop = Workshop.query.get(workshop_id)
+    if not workshop or workshop.status != 'inprogress':
+        emit("vote_error", {"message": "Voting is not active."}, to=request.sid)
+        return
+
+    # Check if current task is the voting task (requires identifying voting tasks)
+    current_task = workshop.current_task
+    if not current_task or TASK_SEQUENCE[workshop.current_task_index] != "clustering_voting": # Check sequence
+         emit("vote_error", {"message": "Not the voting phase."}, to=request.sid)
+         return
+
+    # Check timer
+    remaining_time = workshop.get_remaining_task_time()
+    if remaining_time <= 0:
+         emit("vote_error", {"message": "Time for voting has expired."}, to=request.sid)
+         return
+
+    participant = WorkshopParticipant.query.filter_by(workshop_id=workshop_id, user_id=user_id).first()
+    cluster = IdeaCluster.query.get(cluster_id)
+
+    if not participant or not cluster or cluster.task_id != current_task.id:
+        emit("vote_error", {"message": "Invalid participant or cluster."}, to=request.sid)
+        return
+
+    # --- Process Vote ---
+    existing_vote = IdeaVote.query.filter_by(cluster_id=cluster_id, participant_id=participant.id).first()
+
+    try:
+        new_dots_remaining = participant.dots_remaining
+        vote_action_taken = None # 'voted', 'unvoted'
+
+        if existing_vote:
+            # User already voted for this cluster, so retract the vote
+            db.session.delete(existing_vote)
+            new_dots_remaining += 1 # Give dot back
+            vote_action_taken = 'unvoted'
+            current_app.logger.info(f"User {user_id} unvoted for cluster {cluster_id}")
+        elif participant.dots_remaining > 0:
+            # User has dots and hasn't voted for this cluster yet, cast vote
+            new_vote = IdeaVote(cluster_id=cluster_id, participant_id=participant.id)
+            db.session.add(new_vote)
+            new_dots_remaining -= 1 # Use a dot
+            vote_action_taken = 'voted'
+            current_app.logger.info(f"User {user_id} voted for cluster {cluster_id}")
+        else:
+            # No dots left
+            emit("vote_error", {"message": "You have no dots left."}, to=request.sid)
+            return # Don't proceed
+
+        # Update participant's dot count
+        participant.dots_remaining = new_dots_remaining
+        db.session.commit()
+
+        # --- Calculate New Total Votes for the Cluster ---
+        # Use SQLAlchemy's func.count
+        total_votes_for_cluster = db.session.query(func.count(IdeaVote.id)).filter_by(cluster_id=cluster_id).scalar() or 0
+
+        # --- Broadcast Update ---
+        emit("vote_update", {
+            "cluster_id": cluster_id,
+            "total_votes": total_votes_for_cluster,
+            "user_id": user_id, # User who triggered the update
+            "dots_remaining": new_dots_remaining, # That user's new dot count
+            "action_taken": vote_action_taken # 'voted' or 'unvoted'
+        }, to=room) # Broadcast to everyone in the room
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error processing vote for cluster {cluster_id} by user {user_id}: {e}", exc_info=True)
+        emit("vote_error", {"message": "Server error processing vote."}, to=request.sid)
+
+
+
+
+
+
+
+
+# --- ADD NEW EMITTERS ---
+def emit_clusters_ready(room: str, payload: dict):
+    """Emits cluster data and voting instructions."""
+    socketio.emit("clusters_ready", payload, to=room)
+    current_app.logger.info(f"Emitted clusters_ready to {room} for task {payload.get('task_id')}")
+
+def emit_feasibility_ready(room: str, payload: dict):
+    """Emits feasibility report."""
+    socketio.emit("feasibility_ready", payload, to=room)
+    current_app.logger.info(f"Emitted feasibility_ready to {room} for task {payload.get('task_id')}")
+
+def emit_summary_ready(room: str, payload: dict):
+    """Emits workshop summary."""
+    socketio.emit("summary_ready", payload, to=room)
+    current_app.logger.info(f"Emitted summary_ready to {room} for task {payload.get('task_id')}")
+
+
+
+
+
+
+
+
+
+
+
 # ---------------------------------------------------------------------------
 # Core Socket.IO events
 # ---------------------------------------------------------------------------
@@ -124,6 +245,8 @@ def _on_join_room(data):
         if room in _room_presence:
             _room_presence[room].discard(user_id) # Ensure presence count is correct
 
+    
+    
     # --- Join and Register ---
     join_room(room)
     _sid_registry[sid] = {
@@ -134,130 +257,127 @@ def _on_join_room(data):
     # Ensure the room exists in _room_presence before adding
     if room not in _room_presence:
         _room_presence[room] = set()
+    
     _room_presence[room].add(user_id)
     current_app.logger.info(f"User {user_id} (SID: {sid}) joined {room}")
-
     # --- Broadcast updated participant list ---
     _broadcast_participant_list(room, workshop_id)
 
     # --- Load and emit persistent data TO THE JOINING CLIENT ONLY ---
     # Use a try-except block for database access
     try:
-        workshop = Workshop.query.get(workshop_id)
-        if not workshop:
-            current_app.logger.error(f"Workshop {workshop_id} not found for join_room event.")
-            emit("error_joining", {"message": "Workshop not found."}, to=sid) # Inform client
+        workshop = Workshop.query.options(
+            selectinload(Workshop.current_task) # Eager load task
+        ).get(workshop_id)
+        if not workshop: # ... handle workshop not found ...
             return
 
-        # --- Emit Current Workshop Status ---
-        emit("workshop_status_update", {
-            "workshop_id": workshop_id,
-            "status": workshop.status
-        }, to=sid)
-        current_app.logger.debug(f"Emitted status '{workshop.status}' to {sid}")
+        # Emit Current Workshop Status
+        emit("workshop_status_update", {"workshop_id": workshop_id, "status": workshop.status}, to=sid)
 
-        # --- Emit Current Task and Timer State ---
+        # --- Emit Current Task State (Handles Different Types) ---
         if workshop.current_task_id and workshop.current_task:
             task = workshop.current_task
             remaining_seconds = workshop.get_remaining_task_time()
-            current_app.logger.debug(f"Workshop {workshop_id} has active task {task.id}. Remaining time: {remaining_seconds}s")
+            current_task_index = workshop.current_task_index if workshop.current_task_index is not None else -1
 
+            # Determine current task type based on index
+            current_task_type = TASK_SEQUENCE[current_task_index] if 0 <= current_task_index < len(TASK_SEQUENCE) else "unknown"
+            if current_task_index == -1: current_task_type = "warm-up" # Special case for intro
 
-            # Determine if it's the intro task based on index or title convention
-            is_intro = workshop.current_task_index == -1 # Or check task.title
+            current_app.logger.debug(f"Syncing state for task {task.id} (Type: {current_task_type}, Index: {current_task_index})")
 
-            # Parse the prompt (assuming it's stored as JSON)
+            # Parse the prompt data (should be JSON)
             task_details = {}
             try:
                 task_details = json.loads(task.prompt) if task.prompt else {}
             except json.JSONDecodeError:
                 current_app.logger.warning(f"Could not parse task prompt JSON for task {task.id}")
-                # Fallback: use raw prompt as description if parsing fails
-                task_details = {"task_description": task.prompt or "No description available."}
+                task_details = {"error": "Could not load task details."} # Fallback
 
-            event_name = "introduction_start" if is_intro else "task_ready"
+            # Determine event name and payload based on type
+            event_name = "task_ready" # Default
             payload = {
                 "task_id": task.id,
                 "title": task.title,
                 "duration": task.duration,
-                # Add specific fields based on event type
-                **(task_details if is_intro else {
-                     "description": task_details.get("task_description", "No description."),
-                     "instructions": task_details.get("instructions", "Submit ideas.")
-                })
+                "task_type": current_task_type,
+                 # Include all details parsed from the prompt
+                **task_details
             }
-            # If intro, add specific intro fields if they exist in task_details
-            if is_intro:
-                payload.update({k: task_details[k] for k in ["welcome", "goals", "rules", "task"] if k in task_details})
 
+            if current_task_type == "warm-up":
+                event_name = "introduction_start"
+            elif current_task_type == "clustering_voting":
+                event_name = "clusters_ready"
+                # Add participant dot info to payload for sync
+                participants_data = WorkshopParticipant.query.filter_by(workshop_id=workshop_id, status='accepted').all()
+                payload['participants_dots'] = {part.user_id: part.dots_remaining for part in participants_data}
+            elif current_task_type == "results_feasibility":
+                event_name = "feasibility_ready"
+            elif current_task_type == "summary":
+                event_name = "summary_ready"
+            # else: event_name remains "task_ready" for brainstorming, discussion
 
-            current_app.logger.debug(f"Emitting {event_name} to {sid} for task {task.id} with duration {task.duration}")
+            current_app.logger.debug(f"Emitting {event_name} to {sid} for task {task.id}")
             emit(event_name, payload, to=sid)
 
             # Emit timer sync information
-            current_app.logger.debug(f"Emitting timer_sync to {sid} with remaining: {remaining_seconds}s, paused: {workshop.status == 'paused'}")
             emit("timer_sync", {
-                "task_id": task.id, # Include task_id for context
+                "task_id": task.id,
                 "remaining_seconds": remaining_seconds,
-                "is_paused": workshop.status == 'paused' # Let client know if paused
+                "is_paused": workshop.status == 'paused'
             }, to=sid)
-        else:
-             current_app.logger.debug(f"Workshop {workshop_id} has no active task.")
 
-
-        # --- Emit Whiteboard Content (Current Task's Ideas) ---
-        if workshop.current_task_id:
-            # Ensure participant relationship is loaded for ideas
-            ideas = BrainstormIdea.query.options(
-                selectinload(BrainstormIdea.participant).selectinload(WorkshopParticipant.user)
-            ).filter_by(task_id=workshop.current_task_id).order_by(BrainstormIdea.timestamp).all()
-
-            ideas_payload = []
-            for idea in ideas:
-                # Access user through the preloaded relationships
-                user = idea.participant.user if idea.participant else None
-                user_display_name = user.first_name or user.email.split('@')[0] if user else "Unknown"
-                ideas_payload.append({
+            # --- Emit Whiteboard/Cluster Content ---
+            if current_task_type in ["warm-up", "brainstorming"]:
+                # Emit ideas for brainstorming/warmup
+                ideas = BrainstormIdea.query.options(
+                    selectinload(BrainstormIdea.participant).selectinload(WorkshopParticipant.user)
+                ).filter_by(task_id=task.id).order_by(BrainstormIdea.timestamp).all()
+                ideas_payload = [{
                     "idea_id": idea.id,
-                    "user": user_display_name,
+                    "user": idea.participant.user.first_name or idea.participant.user.email.split('@')[0] if idea.participant and idea.participant.user else "Unknown",
                     "content": idea.content,
-                    "timestamp": idea.timestamp.isoformat() # Ensure consistent format
-                })
-            if ideas_payload:
-                 current_app.logger.debug(f"Emitting whiteboard_sync to {sid} with {len(ideas_payload)} ideas for task {workshop.current_task_id}")
-                 emit("whiteboard_sync", {"ideas": ideas_payload}, to=sid)
-            else:
-                 current_app.logger.debug(f"No ideas found to sync for task {workshop.current_task_id} to {sid}")
-                 # Optionally emit empty sync event if needed by client logic
-                 emit("whiteboard_sync", {"ideas": []}, to=sid)
+                    "timestamp": idea.timestamp.isoformat()
+                } for idea in ideas]
+                emit("whiteboard_sync", {"ideas": ideas_payload}, to=sid)
+                current_app.logger.debug(f"Emitted whiteboard_sync with {len(ideas_payload)} ideas to {sid}")
+
+            elif current_task_type == "clustering_voting":
+                 # For voting phase, whiteboard shows clusters, not individual ideas
+                 # The cluster data is already in the 'clusters_ready' payload.
+                 # We might need to emit vote counts separately if not included initially.
+                 clusters_with_votes = IdeaCluster.query.options(
+                     selectinload(IdeaCluster.votes)
+                 ).filter_by(task_id=task.id).all()
+                 votes_payload = {
+                     cluster.id: len(cluster.votes) for cluster in clusters_with_votes
+                 }
+                 emit("all_votes_sync", {"votes": votes_payload}, to=sid) # New event for initial vote counts
+                 current_app.logger.debug(f"Emitted all_votes_sync with counts for {len(votes_payload)} clusters to {sid}")
+
+
+        else:
+             current_app.logger.debug(f"Workshop {workshop_id} has no active task upon join.")
+             # Optionally emit an event to clear the task area on the client
+             emit("no_active_task", {}, to=sid)
 
 
         # --- Emit Chat History ---
-        # Limit history to avoid overwhelming client (e.g., last 50 messages)
+        # (Keep existing chat history emission logic)
         chat_history = ChatMessage.query.filter_by(workshop_id=workshop_id)\
                                         .order_by(ChatMessage.timestamp.desc())\
                                         .limit(50)\
                                         .all()
-        chat_history.reverse() # Put them back in chronological order
-
-        history_payload = []
-        for msg in chat_history:
-            history_payload.append({
-                "user_name": msg.username,
-                "message": msg.message,
-                "timestamp": msg.timestamp.isoformat() # Ensure consistent format
-            })
-        if history_payload:
-            current_app.logger.debug(f"Emitting chat_history to {sid} with {len(history_payload)} messages")
-            emit("chat_history", {"messages": history_payload}, to=sid)
-        else:
-            current_app.logger.debug(f"No chat history found to sync for workshop {workshop_id} to {sid}")
-            # Optionally emit empty history if needed by client
-            # emit("chat_history", {"messages": []}, to=sid)
+        chat_history.reverse()
+        history_payload = [{
+            "user_name": msg.username, "message": msg.message, "timestamp": msg.timestamp.isoformat()
+        } for msg in chat_history]
+        emit("chat_history", {"messages": history_payload}, to=sid)
 
     except Exception as e:
         current_app.logger.error(f"Error during join_room state emission for workshop {workshop_id}, SID {sid}: {e}", exc_info=True)
-        # Optionally inform the client about the error
         emit("error_joining", {"message": "Error retrieving workshop state."}, to=sid)
         
         

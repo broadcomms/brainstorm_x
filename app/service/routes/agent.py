@@ -639,3 +639,105 @@ def chat():
     current_app.logger.info(f"Agent response emitted to meeting_{workshop_id}")
 
     return jsonify({"ok": True}), 200
+
+
+
+
+
+
+
+
+
+
+
+
+# --- ADDED PLACEHOLDER FUNCTIONS ---
+
+def generate_clusters_and_voting_task(workshop_id: int, ideas: list):
+    """
+    [PLACEHOLDER] Generates clusters from ideas and creates a voting task payload.
+    Needs actual LLM implementation.
+    """
+    current_app.logger.info(f"[Agent - Placeholder] Generating clusters for workshop {workshop_id} with {len(ideas)} ideas.")
+    # TODO: Implement LLM call to cluster ideas and generate prompt/instructions/duration.
+    # Example structure (replace with actual LLM output parsing):
+    example_payload = {
+        "title": "Vote on Idea Clusters",
+        "task_type": "clustering_voting",
+        "description": "Ideas have been grouped. Please vote on the clusters.",
+        "instructions": "Use your dots to vote for the clusters you find most promising. Click a cluster's vote button.",
+        "task_duration": 300, # 5 minutes example
+        "clusters": [
+            {"id": 1, "name": "Cluster A (Placeholder)", "description": "Related to topic X", "idea_ids": [idea.id for idea in ideas[:len(ideas)//2]]},
+            {"id": 2, "name": "Cluster B (Placeholder)", "description": "Related to topic Y", "idea_ids": [idea.id for idea in ideas[len(ideas)//2:]]}
+        ],
+        "idea_ids": [idea.id for idea in ideas] # Pass all original idea IDs for reference if needed
+    }
+    # In a real implementation, you'd call the LLM, parse its JSON response,
+    # and return the structured dictionary.
+    return example_payload
+    # On error, return a tuple: return ("Error message", 500)
+
+def generate_feasibility_task(workshop_id: int, clusters_with_votes: list):
+    """
+    [PLACEHOLDER] Generates feasibility analysis based on cluster votes.
+    Needs actual LLM implementation.
+    """
+    current_app.logger.info(f"[Agent - Placeholder] Generating feasibility for workshop {workshop_id} based on {len(clusters_with_votes)} clusters.")
+    # TODO: Implement LLM call to analyze clusters/votes and generate report/prompt/duration.
+    # Example structure:
+    report_content = "## Feasibility Analysis (Placeholder)\n\n"
+    for cluster in clusters_with_votes:
+        vote_count = len(cluster.votes) # Calculate vote count
+        report_content += f"- **{cluster.name}** (Votes: {vote_count}): Seems feasible, requires resources X and Y.\n"
+
+    example_payload = {
+        "title": "Review Feasibility",
+        "task_type": "results_feasibility",
+        "description": "Review the feasibility analysis of the top-voted clusters.",
+        "instructions": "Read the report below and prepare for discussion.",
+        "task_duration": 240, # 4 minutes example
+        "feasibility_report": report_content # Include the generated report
+    }
+    return example_payload
+    # On error, return a tuple: return ("Error message", 500)
+
+def generate_discussion_task(workshop_id: int):
+    """
+    [PLACEHOLDER] Generates a discussion prompt.
+    Needs actual LLM implementation.
+    """
+    current_app.logger.info(f"[Agent - Placeholder] Generating discussion task for workshop {workshop_id}.")
+    # TODO: Implement LLM call for discussion prompt.
+    # Example structure:
+    example_payload = {
+        "title": "Open Discussion",
+        "task_type": "discussion",
+        "description": "Let's discuss the feasibility findings and next steps.",
+        "instructions": "Share your thoughts and questions in the chat.",
+        "task_duration": 600 # 10 minutes example
+    }
+    return example_payload
+    # On error, return a tuple: return ("Error message", 500)
+
+def generate_summary_task(workshop_id: int):
+    """
+    [PLACEHOLDER] Generates a workshop summary.
+    Needs actual LLM implementation.
+    """
+    current_app.logger.info(f"[Agent - Placeholder] Generating summary for workshop {workshop_id}.")
+    # TODO: Implement LLM call to summarize the workshop.
+    # Example structure:
+    summary_content = "## Workshop Summary (Placeholder)\n\nKey outcomes:\n- Discussed feasibility of Cluster A.\n- Agreed on next steps for action item Z."
+    example_payload = {
+        "title": "Workshop Summary",
+        "task_type": "summary",
+        "description": "Here is a summary of the workshop.",
+        "instructions": "Thank you for your participation!",
+        "task_duration": 120, # 2 minutes example
+        "summary_report": summary_content # Include the generated summary
+    }
+    return example_payload
+    # On error, return a tuple: return ("Error message", 500)
+
+# --- END PLACEHOLDER FUNCTIONS ---

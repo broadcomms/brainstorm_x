@@ -179,7 +179,7 @@ class Workshop(db.Model):
         "BrainstormTask",
         back_populates="workshop",
         cascade="all, delete-orphan",
-        lazy='dynamic',
+        lazy='select',
         # Explicitly state the foreign key column(s) in the *child* table (BrainstormTask)
         # that link back to *this* parent table (Workshop).
         foreign_keys="BrainstormTask.workshop_id"
@@ -236,10 +236,17 @@ class WorkshopParticipant(db.Model):
     token_expires = db.Column(db.DateTime, nullable=True) # Expiration for the token
     joined_timestamp = db.Column(db.DateTime, nullable=True) # When they accepted
 
+    # --- ADDED FOR VOTING ---
+    dots_remaining = db.Column(db.Integer, default=5) # Example: Start with 5 dots
+    # ------------------------
+
+
     # Relationships
-    # submitted_ideas = db.relationship("SubmittedIdea", back_populates="participant", cascade="all, delete-orphan", lazy='dynamic')
     workshop = db.relationship("Workshop", back_populates="participants")
     user = db.relationship("User", back_populates="workshop_participations")
+    submitted_ideas = db.relationship("BrainstormIdea", back_populates="participant", cascade="all, delete-orphan", lazy='dynamic') # Added backref
+    votes_cast = db.relationship("IdeaVote", back_populates="participant", cascade="all, delete-orphan", lazy='dynamic') # Added backref
+
 
     # Unique constraint
     __table_args__ = (db.UniqueConstraint('workshop_id', 'user_id', name='_workshop_user_uc'),)
@@ -299,18 +306,24 @@ class BrainstormIdea(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=False)
     participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    votes = db.relationship("IdeaVote", back_populates="idea", cascade="all, delete-orphan", lazy='dynamic')
+    # votes = db.relationship("IdeaVote", back_populates="idea", cascade="all, delete-orphan", lazy='dynamic')
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    # feasibility_report = db.Column(db.Text, nullable=True) # Stores the generated feasibility report content
-    # Add back later
+    
+    # --- ADDED/MODIFIED FOR CLUSTERING ---
+    cluster_id = db.Column(db.Integer, db.ForeignKey("idea_clusters.id"), nullable=True)
+    cluster = db.relationship("IdeaCluster", back_populates="ideas")
+    # -----------------------------------
+    
     
     # Relationships
     task = db.relationship("BrainstormTask", back_populates="ideas")
-    participant = db.relationship("WorkshopParticipant")
+    participant = db.relationship("WorkshopParticipant", back_populates="submitted_ideas") # Use back_populates
+    # votes = db.relationship("IdeaVote", back_populates="idea", cascade="all, delete-orphan", lazy='dynamic') # Added backref
+
     
     # Remove Idea
-    cluster_id = db.Column(db.Integer, db.ForeignKey("idea_clusters.id"), nullable=True)
-    cluster = db.relationship("IdeaCluster", back_populates="ideas")
+    # cluster_id = db.Column(db.Integer, db.ForeignKey("idea_clusters.id"), nullable=True)
+    # cluster = db.relationship("IdeaCluster", back_populates="ideas")
     
     # ... (Remove IdeaCluster, IdeaVote, ActivityLog, SubmittedIdea, WorkshopTask if not used for core persistence) ...
     # Keep ChatMessage as it's part of the persistence requirement
@@ -322,11 +335,15 @@ class IdeaCluster(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey("brainstorm_tasks.id"), nullable=False)
     name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True) # Optional description
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     ideas = db.relationship("BrainstormIdea", back_populates="cluster", lazy='dynamic')
+    task = db.relationship("BrainstormTask") # Relationship back to the voting task
+    votes = db.relationship("IdeaVote", back_populates="cluster", cascade="all, delete-orphan", lazy='dynamic') # Votes for this cluster
+
 
 
 
@@ -334,17 +351,20 @@ class IdeaCluster(db.Model):
 class IdeaVote(db.Model):
     __tablename__ = "idea_votes"
     id = db.Column(db.Integer, primary_key=True)
-    idea_id = db.Column(db.Integer, db.ForeignKey("brainstorm_ideas.id"), nullable=False)
+    cluster_id = db.Column(db.Integer, db.ForeignKey("idea_clusters.id"), nullable=False)
     participant_id = db.Column(db.Integer, db.ForeignKey("workshop_participants.id"), nullable=False)
-    votes = db.Column(db.Integer, default=1)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    __table_args__ = (db.UniqueConstraint('idea_id', 'participant_id', name='_idea_participant_uc'),)
+    # --- MODIFIED: Unique constraint per participant per cluster ---
+    __table_args__ = (db.UniqueConstraint('cluster_id', 'participant_id', name='_cluster_participant_uc'),)
+
 
     # Relationships
-    idea = db.relationship("BrainstormIdea", back_populates="votes")
-    participant = db.relationship("WorkshopParticipant")
-    # logs = db.relationship("ActivityLog", back_populates="vote", cascade="all, delete-orphan", lazy='dynamic') # If ActivityLog exists
+    # idea = db.relationship("BrainstormIdea", back_populates="votes") # Remove if voting on clusters
+    cluster = db.relationship("IdeaCluster", back_populates="votes") # Link to cluster
+    participant = db.relationship("WorkshopParticipant", back_populates="votes_cast") # Use back_populates
+
 
 
 # --- ADDED ActivityLog model definition based on previous context ---
@@ -364,7 +384,6 @@ class ActivityLog(db.Model):
     idea        = db.relationship("BrainstormIdea") # Add back_populates="logs" in BrainstormIdea if needed
     vote        = db.relationship("IdeaVote") # Add back_populates="logs" in IdeaVote if needed
 
-   
 
 
 # ---------------- ChatMessage Model ---------------------------

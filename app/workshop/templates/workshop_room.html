@@ -9,31 +9,30 @@
 <div class="container mt-4">
   <div class="card shadow-sm">
     <!-- ===================== Header ===================== -->
-    <div class="card-header bg-success text-white d-flex align-items-center">
-      <h1 class="h4 mb-0">Workshop Room: {{ workshop.title }}</h1>
+    <div class="card-header bg-success text-white d-flex align-items-center flex-wrap gap-2"> {# Added flex-wrap #}
+      <h1 class="h4 mb-0 flex-grow-1">Workshop: {{ workshop.title }}</h1>
+      {# Participant Dots Display - Added Here #}
+      <div id="user-dots-display" class="me-3" style="display: none;"> {# Hidden initially #}
+         <span class="badge bg-light text-dark">Your Dots: <span id="user-dots-count">0</span></span>
+      </div>
       <div class="ms-auto d-flex gap-2">
-        {# Use data-leave-url attribute for JS navigation #}
+        {# Leave/Pause/Resume/Stop buttons as before #}
         <a id="leave-room-btn" class="btn btn-sm btn-outline-light" href="#"
            data-leave-url="{{ url_for('workshop_bp.view_workshop', workshop_id=workshop.id) }}">
-          <i class="bi bi-box-arrow-left"></i> Leave Room
+          <i class="bi bi-box-arrow-left"></i> Leave
         </a>
-        {# ----- Organizer controls ----- #}
         {% if is_organizer_flag %}
           {% if workshop.status == 'inprogress' %}
-          <form id="pause-workshop-form-room" method="POST" class="d-inline"
-            action="{{ url_for('workshop_bp.pause_workshop', workshop_id=workshop.id) }}">
+          <form id="pause-workshop-form-room" method="POST" class="d-inline" action="{{ url_for('workshop_bp.pause_workshop', workshop_id=workshop.id) }}">
             <button type="submit" class="btn btn-sm btn-warning"><i class="bi bi-pause-fill"></i> Pause</button>
           </form>
           {% elif workshop.status == 'paused' %}
-          <form id="resume-workshop-form-room" method="POST" class="d-inline"
-            action="{{ url_for('workshop_bp.resume_workshop', workshop_id=workshop.id) }}">
+          <form id="resume-workshop-form-room" method="POST" class="d-inline" action="{{ url_for('workshop_bp.resume_workshop', workshop_id=workshop.id) }}">
             <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-play-fill"></i> Resume</button>
           </form>
           {% endif %}
-          {# Allow stopping if inprogress or paused #}
           {% if workshop.status in ['inprogress', 'paused'] %}
-          <form id="stop-workshop-form-room" method="POST" class="d-inline"
-            action="{{ url_for('workshop_bp.stop_workshop', workshop_id=workshop.id) }}">
+          <form id="stop-workshop-form-room" method="POST" class="d-inline" action="{{ url_for('workshop_bp.stop_workshop', workshop_id=workshop.id) }}">
             <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-stop-fill"></i> Stop</button>
           </form>
           {% endif %}
@@ -43,75 +42,53 @@
 
     <!-- ===================== Body ===================== -->
     <div class="card-body">
-
-      <!-- Top Area Start-->
+      <!-- Top Area: Status & Participants -->
       <div class="row mb-3 align-items-start">
-        <!-- Top left: Status/Welcome (col-md-3) -->
         <div class="col-md-3">
           <p class="mb-1"><strong>Status:</strong>
             <span id="workshop-status-badge" class="badge {{ 'bg-warning text-dark' if is_paused else 'bg-success' }}">
               {{ workshop.status|capitalize }}
             </span>
           </p>
-          <p class="text-muted small">Welcome, {{ current_user.first_name or current_user.email.split('@')[0] }}!</p> {# Added fallback name #}
+          <p class="text-muted small">Welcome, {{ current_user.first_name or current_user.email.split('@')[0] }}!</p>
         </div>
-        <!-- End top left -->
-
-        <!-- Top right: Participant Tiles (col-md-9) -->
         <div class="col-md-9">
           <div id="participant-tiles-container" class="d-flex flex-wrap justify-content-end gap-2">
-             <span class="placeholder col-2 placeholder-sm"></span> {# Placeholder #}
+             {# Tiles added by JS #}
           </div>
         </div>
-        <!-- End Top Right -->
       </div>
-      <!-- Top Area Ends -->
-
       <hr>
 
-      <!-- Flow control area -->
+      <!-- Flow control area: Organizer Buttons & Timer -->
       <div class="d-flex justify-content-between align-items-center mb-3">
-        {# Organizer Controls on the Left #}
-        <div>
+        <div> {# Organizer Controls #}
           {% if is_organizer_flag %}
-            {# Hide Begin button if a task is already running or workshop isn't in progress #}
-            <form id="begin-intro-form" class="d-inline me-2"
-                  action="{{ url_for('workshop_bp.begin_intro', workshop_id=workshop.id) }}" method="POST"
-                  style="{{ 'display: none;' if workshop.current_task_id or workshop.status != 'inprogress' else '' }}">
+            <form id="begin-intro-form" class="d-inline me-2" action="{{ url_for('workshop_bp.begin_intro', workshop_id=workshop.id) }}" method="POST" style="display: none;"> {# Hidden initially #}
               <button type="submit" class="btn btn-sm btn-info">Begin Workshop</button>
             </form>
-            {# Next Task button: Initially disabled, enabled by JS when timer ends #}
-            <button id="next-task-btn" class="btn btn-sm btn-secondary" disabled>Next Task</button>
+            <button id="next-task-btn" class="btn btn-sm btn-secondary" disabled>Next Task</button> {# Disabled initially #}
           {% endif %}
         </div>
-        {# Timer Display on the Right #}
-        <div id="timer-display" class="text-end">
+        <div id="timer-display" class="text-end"> {# Timer #}
           <small id="timer-text" class="text-muted h1 font-monospace">--:--</small>
           <div class="progress mt-1" style="height: 5px;">
             <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
           </div>
         </div>
       </div>
-      <!-- Flow control area ends -->
-
       <hr>
+
       <!-- ======== 1. AI FACILITATOR ======== -->
       <h4>AI Facilitator</h4>
-      <div id="task-area" class="border rounded p-3 bg-light position-relative mb-3" style="min-height:150px;"> {# Adjusted min-height #}
-        <p id="task-placeholder" class="text-muted" style="{{ 'display: none;' if workshop.current_task_id else '' }}">
-          Waiting for the workshop task to begin...
-        </p>
-
-        <div id="task-content" style="{{ '' if workshop.current_task_id else 'display:none;' }}">
+      <div id="task-area" class="border rounded p-3 bg-light position-relative mb-3" style="min-height:150px;">
+        <p id="task-placeholder" class="text-muted">Waiting for the workshop task to begin...</p>
+        <div id="task-content" style="display:none;">
           <h5 id="task-title"></h5>
-          <p id="task-description"></p>
-          <span id="task-instructions"></span>
+          <div id="task-body"></div> {# Generic container for task content #}
         </div>
-
-        <!-- pause overlay -->
-        <div id="pause-overlay" class="position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 {# Adjusted opacity #}
-                    d-flex justify-content-center align-items-center {{ '' if is_paused else 'd-none' }}"
-          style="z-index:10; color: white;"> {# White text for contrast #}
+        <!-- Pause Overlay -->
+        <div id="pause-overlay" class="position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex justify-content-center align-items-center {{ '' if is_paused else 'd-none' }}" style="z-index:10; color: white;">
           <span class="fs-4"><i class="bi bi-pause-circle-fill me-2"></i> Paused</span>
         </div>
       </div>
@@ -120,41 +97,43 @@
       <hr>
 
       <div class="row">
-        <!-- ======== 2. LEFT COLUMN (Whiteboard + idea form) ======== -->
+        <!-- ======== 2. LEFT COLUMN (Whiteboard / Clusters / Report) ======== -->
         <div class="col-md-8">
-          <h4>Whiteboard</h4>
-          <div id="sticky-board" class="d-flex flex-wrap gap-2 border rounded p-2 mb-3"
-            style="min-height:200px; background-color:#f8f9fa;"> {# Adjusted height and color #}
-            <p id="idea-placeholder" class="text-muted small fst-italic w-100 text-center mt-3" style="{{ 'display: none;' if workshop.current_task_id else '' }}"> {# Hide if task active #}
-              Ideas will appear here once the task begins.
-            </p>
+          <h4 id="left-column-title">Whiteboard</h4> {# Title changes dynamically #}
+
+          {# --- Whiteboard for Ideas --- #}
+          <div id="sticky-board" class="d-flex flex-wrap gap-2 border rounded p-2 mb-3" style="min-height:200px; background-color:#f8f9fa; display: none;"> {# Hidden initially #}
+            <p id="idea-placeholder" class="text-muted small fst-italic w-100 text-center mt-3">Ideas will appear here...</p>
             {# Sticky notes added by JS #}
           </div>
 
-          <!-- IDEA INPUT FORM -->
-          {# Initially hidden, shown by JS when a task starts #}
-          <div id="idea-form-container" class="mb-3" style="display: none;">
+          {# --- Cluster Voting Area --- #}
+          <div id="cluster-voting-area" class="mb-3" style="display: none;"> {# Hidden initially #}
+             {# Clusters and vote buttons added by JS #}
+          </div>
+
+          {# --- Feasibility/Summary Report Area --- #}
+          <div id="report-area" class="border rounded p-3 mb-3 bg-light" style="display: none;"> {# Hidden initially #}
+             {# Report content added by JS #}
+          </div>
+
+          {# --- Idea Input Form --- #}
+          <div id="idea-form-container" class="mb-3" style="display: none;"> {# Hidden initially #}
             <form id="idea-form">
-              <textarea id="idea-input" class="form-control mb-2" placeholder="Enter your response here…" rows="2" autocomplete="off" required {{ 'disabled' if is_paused }}></textarea>
-              {# Removed hidden llm-output field unless specifically needed #}
-              <button id="idea-submit" type="submit" class="btn btn-primary w-100" {{ 'disabled' if is_paused }}>
-                  <i class="bi bi-send"></i> Submit
-              </button>
+              <textarea id="idea-input" class="form-control mb-2" placeholder="Enter your response here…" rows="2" autocomplete="off" required></textarea>
+              <button id="idea-submit" type="submit" class="btn btn-primary w-100"><i class="bi bi-send"></i> Submit</button>
             </form>
-            {# Removed inline script, moved logic to main script block #}
           </div>
         </div>
 
         <!-- ======== 3. RIGHT COLUMN (Attendees chat) ======== -->
         <div class="col-md-4">
           <h4>Attendees Chat</h4>
-          <div id="chat-messages" class="border rounded p-2 mb-2 bg-light" style="height:300px; overflow-y:scroll;">
-            {# Messages added by JS #}
-          </div>
+          <div id="chat-messages" class="border rounded p-2 mb-2 bg-light" style="height:300px; overflow-y:scroll;"></div>
           <form id="chat-form">
             <div class="input-group">
-              <input id="chat-input" type="text" class="form-control" placeholder="Type message…" {{ 'disabled' if is_paused }} autocomplete="off">
-              <button class="btn btn-outline-secondary" type="submit" {{ 'disabled' if is_paused }}>Send</button> {# Changed style #}
+              <input id="chat-input" type="text" class="form-control" placeholder="Type message…" autocomplete="off">
+              <button class="btn btn-outline-secondary" type="submit">Send</button>
             </div>
           </form>
         </div>
@@ -166,11 +145,17 @@
 
 <!-- ===================== Scripts ===================== -->
 <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script> {# Ensure Socket.IO is included #}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> {# Add Marked.js for Markdown rendering #}
+
+
 <script>
   // --- Global State ---
   let currentTaskId = {{ workshop.current_task_id or 'null' }};
+  let currentTaskType = null; // Will be set by task events
   let countdownInterval = null;
   let totalDurationForCurrentTask = 0; // MUST be updated when a task starts
+  let userDots = 0; // Track user's dots locally
+  let userVotes = {}; // Track which clusters user voted for { clusterId: true }
 
   const workshopId = {{ workshop.id }};
   const userId = {{ current_user.user_id }};
@@ -184,13 +169,21 @@
     taskPlaceholder: document.getElementById('task-placeholder'),
     taskContent: document.getElementById('task-content'),
     taskTitle: document.getElementById('task-title'),
-    taskDescription: document.getElementById('task-description'),
+    // taskDescription: document.getElementById('task-description'),
+    taskBody: document.getElementById('task-body'), // Container for dynamic content
+
     ideaFormContainer: document.getElementById('idea-form-container'),
     ideaInput: document.getElementById('idea-input'),
     ideaSubmitBtn: document.getElementById('idea-submit'),
     ideaForm: document.getElementById('idea-form'),
     stickyBoard: document.getElementById('sticky-board'),
     ideaPlaceholder: document.getElementById('idea-placeholder'),
+
+    clusterVotingArea: document.getElementById('cluster-voting-area'),
+    reportArea: document.getElementById('report-area'),
+    leftColumnTitle: document.getElementById('left-column-title'),
+
+
     progressBar: document.getElementById('progress-bar'),
     timerText: document.getElementById('timer-text'),
     chatForm: document.getElementById('chat-form'),
@@ -204,7 +197,11 @@
     leaveRoomBtn: document.getElementById('leave-room-btn'),
     pauseWorkshopForm: document.getElementById('pause-workshop-form-room'),
     resumeWorkshopForm: document.getElementById('resume-workshop-form-room'),
-    stopWorkshopForm: document.getElementById('stop-workshop-form-room')
+    stopWorkshopForm: document.getElementById('stop-workshop-form-room'),
+
+    userDotsDisplay: document.getElementById('user-dots-display'),
+    userDotsCount: document.getElementById('user-dots-count')
+
   };
 
   // --- Utility Functions (postForm, clearCountdown, addStickyNote, updateParticipantTiles, appendChatMessage) ---
@@ -407,14 +404,20 @@
       elements.timerText.textContent = '00:00';
       elements.progressBar.style.width = '100%';
 
-      // Disable idea form
-      elements.ideaFormContainer.style.display = 'none'; // Hide form when time is up
-      elements.ideaSubmitBtn.disabled = true;
-      elements.ideaInput.disabled = true;
+    // Disable relevant inputs based on task type
+    if (currentTaskType === 'clustering_voting') {
+        // Disable all vote buttons
+        elements.clusterVotingArea.querySelectorAll('.vote-btn').forEach(btn => btn.disabled = true);
+    } else {
+        // Disable idea form
+        elements.ideaFormContainer.style.display = 'none';
+        elements.ideaSubmitBtn.disabled = true;
+        elements.ideaInput.disabled = true;
+    }
 
       // Enable "Next Task" button for organizer
       if (isOrganizer && elements.nextTaskBtn) {
-          elements.nextTaskBtn.disabled = false; // <<<< ENSURE THIS IS ENABLED
+          elements.nextTaskBtn.disabled = false; 
           elements.nextTaskBtn.innerHTML = 'Next Task';
       }
   }
@@ -426,79 +429,112 @@
         console.error("Invalid task data received in displayTask:", data);
         return;
     }
+    
     currentTaskId = data.task_id;
+    currentTaskType = data.task_type; // Store the task type
     totalDurationForCurrentTask = parseInt(data.duration, 10) || 0;
     console.log(`Set totalDurationForCurrentTask to: ${totalDurationForCurrentTask}`);
 
-    // --- Clear Whiteboard ---
-    if (elements.stickyBoard) {
-        elements.stickyBoard.innerHTML = ''; // Clear previous notes
-        // Re-add placeholder initially, it will be hidden if whiteboard_sync brings ideas
-        elements.stickyBoard.innerHTML = `
-            <p id="idea-placeholder" class="text-muted small fst-italic w-100 text-center mt-3">
-                Ideas will appear here...
-            </p>`;
-        elements.ideaPlaceholder = document.getElementById('idea-placeholder'); // Re-select placeholder
-    } else {
-        console.error("Sticky board element not found!");
-    }
-    // --- End Clear Whiteboard ---
-
+    // --- Reset UI ---
     elements.taskPlaceholder.style.display = 'none';
     elements.taskContent.style.display = 'block';
+    elements.stickyBoard.style.display = 'none';
+    elements.clusterVotingArea.style.display = 'none';
+    elements.reportArea.style.display = 'none';
+    elements.ideaFormContainer.style.display = 'none';
+    elements.userDotsDisplay.style.display = 'none'; // Hide dots display by default
+    elements.clusterVotingArea.innerHTML = ''; // Clear previous clusters
+    elements.reportArea.innerHTML = ''; // Clear previous report
+    elements.stickyBoard.innerHTML = `<p id="idea-placeholder" class="text-muted small fst-italic w-100 text-center mt-3">Ideas will appear here...</p>`; // Reset whiteboard
+    elements.ideaPlaceholder = document.getElementById('idea-placeholder'); // Re-select
+
+
 
     // --- Update AI Facilitator Area ---
     elements.taskTitle.textContent = data.title || "Workshop Task";
+    elements.taskBody.innerHTML = ''; // Clear previous body
 
-    // Build description HTML based on task type (intro vs. regular)
-    let descriptionHtml = '';
+    // --- Populate Task Body based on Type ---
+    let instructions = data.instructions || "Please follow the instructions.";
+    let description = data.description || data.task_description || "";
 
-    // Check if it looks like an intro task payload (adjust keys if needed)
-    if (data.welcome && data.goals && data.rules && data.task) {
-        // Format for welcome and introduction task
-        descriptionHtml = `
-              <hr>
-              <p class="mb-2"> ${data.welcome}</p>
-              <p class="mb-2"> ${data.goals}</p>
-              <p class="mb-2"> ${data.rules}</p>
-              <p class="mb-2"> ${data.instructions}</p>
-              
-              <hr>
-              <p class="mb-2" style="font-weight: bold;">Icebreaker</p>
-              <p class="mb-2 fs-5">${data.task}</p>
-              <p class="mb-2" style="font-weight: bold;">Instruction</p>
-              <p class="mb-2"> ${data.task_description}</p>
-              `
-
-    } else { // Subsequent task
-     // Format for Regular Brainstorming Task
-     descriptionHtml = `
-            <p class="fs-5 mb-2">${data.description || "Please brainstorm on the following topic."}</p>
+    if (currentTaskType === 'warm-up') {
+        elements.taskBody.innerHTML = `
+            <p class="mb-2">${data.welcome || ''}</p>
+            <p class="mb-2">${data.goals || ''}</p>
+            <p class="mb-2">${data.rules || ''}</p>
+            <hr>
+            <p class="mb-2" style="font-weight: bold;">Icebreaker</p>
+            <p class="mb-2 fs-5">${data.task || description}</p>
+            <p class="mb-2" style="font-weight: bold;">Instruction</p>
+            <p class="mb-2">${instructions}</p>`;
+        elements.leftColumnTitle.textContent = "Whiteboard";
+        elements.stickyBoard.style.display = 'flex'; // Show whiteboard
+        elements.ideaFormContainer.style.display = 'block'; // Show idea form
+    } else if (currentTaskType === 'brainstorming') {
+        elements.taskBody.innerHTML = `
+            <p class="fs-5 mb-2">${description}</p>
             <p class="mb-1"><strong>Instructions:</strong></p>
-            <p>${data.instructions || "Submit your ideas individually using the input field below."}</p>
-        `;
-         // Optionally display task_type if needed:
-         descriptionHtml += `<p class="small text-muted">Task Type: ${data.task_type || 'N/A'}</p>`;
+            <p>${instructions}</p>`;
+        elements.leftColumnTitle.textContent = "Whiteboard";
+        elements.stickyBoard.style.display = 'flex'; // Show whiteboard
+        elements.ideaFormContainer.style.display = 'block'; // Show idea form
+    } else if (currentTaskType === 'clustering_voting') {
+        elements.taskBody.innerHTML = `
+            <p class="fs-5 mb-2">${description || 'Ideas have been clustered. Please vote for the clusters you find most promising.'}</p>
+            <p class="mb-1"><strong>Instructions:</strong></p>
+            <p>${instructions || `Use your dots to vote. You have ${userDots} dots remaining.`}</p>`;
+        elements.leftColumnTitle.textContent = "Clusters & Voting";
+        elements.clusterVotingArea.style.display = 'block'; // Show voting area
+        elements.userDotsDisplay.style.display = 'block'; // Show dots display
+        renderClusters(data.clusters || []); // Render the clusters
+        // Sync initial dots for the current user
+        if (data.participants_dots && data.participants_dots[userId] !== undefined) {
+            updateUserDots(data.participants_dots[userId]);
+        }
+    } else if (currentTaskType === 'results_feasibility') {
+        elements.taskBody.innerHTML = `
+            <p class="fs-5 mb-2">${description || 'Voting has concluded. Here is the feasibility analysis:'}</p>
+            <p class="mb-1"><strong>Instructions:</strong></p>
+            <p>${instructions || 'Review the analysis below and prepare for discussion.'}</p>`;
+        elements.leftColumnTitle.textContent = "Feasibility Report";
+        elements.reportArea.style.display = 'block'; // Show report area
+        // Render the report (assuming it's Markdown in data.feasibility_report)
+        elements.reportArea.innerHTML = data.feasibility_report ? marked.parse(data.feasibility_report) : '<p class="text-muted">No feasibility report available.</p>';
+    } else if (currentTaskType === 'discussion') {
+        elements.taskBody.innerHTML = `
+            <p class="fs-5 mb-2">${description || 'Let\'s discuss the findings.'}</p>
+            <p class="mb-1"><strong>Instructions:</strong></p>
+            <p>${instructions || 'Use the chat to share your thoughts.'}</p>`;
+        // No specific left column needed, chat is on the right
+        elements.leftColumnTitle.textContent = "Discussion";
+    } else if (currentTaskType === 'summary') {
+        elements.taskBody.innerHTML = `
+            <p class="fs-5 mb-2">${description || 'Workshop Summary:'}</p>
+            <p class="mb-1"><strong>Instructions:</strong></p>
+            <p>${instructions || 'Thank you for your participation!'}</p>`;
+        elements.leftColumnTitle.textContent = "Workshop Summary";
+        elements.reportArea.style.display = 'block'; // Show report area
+        // Render the summary (assuming it's Markdown in data.summary_report)
+        elements.reportArea.innerHTML = data.summary_report ? marked.parse(data.summary_report) : '<p class="text-muted">No summary available.</p>';
+    } else {
+        // Fallback for unknown type
+        elements.taskBody.innerHTML = `<p>${description || 'Task details unavailable.'}</p><p>${instructions}</p>`;
+        elements.leftColumnTitle.textContent = "Task Area";
     }
-    elements.taskDescription.innerHTML = descriptionHtml;
-    // --- End Update AI Facilitator Area ---
 
 
 
 
-    // --- Show and Enable Idea Form ---
+
+    // --- Manage Input Form and Organizer Buttons ---
     const isPaused = workshopStatus === 'paused';
-    elements.ideaFormContainer.style.display = 'block';
     elements.ideaInput.value = ''; // Clear previous input
-    elements.ideaSubmitBtn.disabled = isPaused;
-    elements.ideaInput.disabled = isPaused;
-    // --- End Show and Enable Idea Form ---
+    elements.ideaFormContainer.style.display = 'block';
 
+    elements.ideaSubmitBtn.disabled = isPaused || currentTaskType !== 'warm-up' && currentTaskType !== 'brainstorming';
+    elements.ideaInput.disabled = isPaused || currentTaskType !== 'warm-up' && currentTaskType !== 'brainstorming';
 
-
-    // Clear previous ideas from whiteboard
-    elements.stickyBoard.innerHTML = '';
-    elements.ideaPlaceholder.style.display = 'none';
 
     // --- Manage Organizer Buttons ---
     if (isOrganizer) {
@@ -512,14 +548,128 @@
             elements.beginIntroForm.style.display = 'none';
         }
     }
-    // --- End Manage Organizer Buttons ---
 
 
 
-    // Start countdown with the FULL duration initially.
-    // The 'timer_sync' event will correct this immediately if rejoining mid-task.
+
+    // --- Start timer ---
     startOrSyncCountdown(totalDurationForCurrentTask, totalDurationForCurrentTask);
   }
+
+  function renderClusters(clusters) {
+      elements.clusterVotingArea.innerHTML = ''; // Clear previous
+      userVotes = {}; // Reset local tracking of user's votes for this phase
+
+      if (!clusters || clusters.length === 0) {
+          elements.clusterVotingArea.innerHTML = '<p class="text-muted">No clusters generated.</p>';
+          return;
+      }
+
+      clusters.forEach(cluster => {
+          const clusterDiv = document.createElement('div');
+          clusterDiv.className = 'cluster-item card mb-3 shadow-sm';
+          clusterDiv.id = `cluster-${cluster.id}`;
+          clusterDiv.innerHTML = `
+              <div class="card-body">
+                  <h6 class="card-title d-flex justify-content-between align-items-center">
+                      <span>${cluster.name || 'Unnamed Cluster'}</span>
+                      <span class="badge bg-secondary rounded-pill vote-count" id="vote-count-${cluster.id}">0</span>
+                  </h6>
+                  ${cluster.description ? `<p class="card-text small text-muted">${cluster.description}</p>` : ''}
+                  <button class="btn btn-sm btn-outline-primary vote-btn" data-cluster-id="${cluster.id}" ${workshopStatus === 'paused' ? 'disabled' : ''}>
+                      <i class="bi bi-hand-thumbs-up"></i> Vote
+                  </button>
+                  {# Optional: Add a section to show ideas within the cluster #}
+                  {# <div class="ideas-in-cluster small mt-2" style="max-height: 100px; overflow-y: auto;">...</div> #}
+              </div>
+          `;
+          elements.clusterVotingArea.appendChild(clusterDiv);
+      });
+
+      // Add event listeners to NEW vote buttons
+      elements.clusterVotingArea.querySelectorAll('.vote-btn').forEach(button => {
+          button.addEventListener('click', handleVoteButtonClick);
+      });
+  }
+
+  function handleVoteButtonClick(event) {
+      const button = event.currentTarget;
+      const clusterId = button.dataset.clusterId;
+      if (!clusterId || button.disabled) return;
+
+      // Determine action based on whether user already voted for this locally
+      // const action = userVotes[clusterId] ? 'decrement' : 'increment'; // Simple toggle logic
+
+      // Prevent voting if no dots left (client-side check)
+      // if (action === 'increment' && userDots <= 0) {
+      //     alert("You have no dots left to vote.");
+      //     return;
+      // }
+
+      console.log(`Emitting submit_vote for cluster ${clusterId}`);
+      button.disabled = true; // Temporarily disable button
+
+      socket.emit('submit_vote', {
+          room: roomName,
+          workshop_id: workshopId,
+          user_id: userId,
+          cluster_id: parseInt(clusterId),
+          // action: action // Send intended action
+      });
+
+      // OPTIONAL: Optimistic UI update (update count locally immediately)
+      // This can feel faster but might be briefly incorrect if server rejects vote.
+      // const voteCountSpan = document.getElementById(`vote-count-${clusterId}`);
+      // if (voteCountSpan) {
+      //     let currentCount = parseInt(voteCountSpan.textContent) || 0;
+      //     voteCountSpan.textContent = action === 'increment' ? currentCount + 1 : Math.max(0, currentCount - 1);
+      // }
+      // updateUserDots(action === 'increment' ? userDots - 1 : userDots + 1);
+      // userVotes[clusterId] = (action === 'increment'); // Update local tracking
+  }
+
+  function updateUserDots(newDotCount) {
+      userDots = Math.max(0, newDotCount); // Ensure non-negative
+      if (elements.userDotsCount) {
+          elements.userDotsCount.textContent = userDots;
+      }
+      // Maybe update voting instructions text too
+      const instructionsElement = elements.taskBody.querySelector('p:last-of-type'); // Find instructions paragraph
+      if (instructionsElement && currentTaskType === 'clustering_voting') {
+           instructionsElement.textContent = `Use your dots to vote. You have ${userDots} dots remaining.`;
+      }
+  }
+
+  function updateVoteDisplay(clusterId, totalVotes, voterUserId, voterDotsRemaining, actionTaken) {
+      // Update the total vote count display for the cluster
+      const voteCountSpan = document.getElementById(`vote-count-${clusterId}`);
+      if (voteCountSpan) {
+          voteCountSpan.textContent = totalVotes;
+      }
+
+      // If the update was triggered by the current user, update their dot count and button state
+      if (voterUserId === userId) {
+          updateUserDots(voterDotsRemaining);
+
+          // Update local vote tracking and button appearance
+          const button = elements.clusterVotingArea.querySelector(`.vote-btn[data-cluster-id="${clusterId}"]`);
+          if (button) {
+               button.disabled = (workshopStatus === 'paused'); // Re-enable button (unless paused)
+               if (actionTaken === 'voted') {
+                   userVotes[clusterId] = true;
+                   button.classList.remove('btn-outline-primary');
+                   button.classList.add('btn-primary'); // Make button look 'active'
+                   button.innerHTML = '<i class="bi bi-hand-thumbs-up-fill"></i> Voted';
+               } else if (actionTaken === 'unvoted') {
+                   delete userVotes[clusterId];
+                   button.classList.remove('btn-primary');
+                   button.classList.add('btn-outline-primary'); // Make button look 'inactive'
+                   button.innerHTML = '<i class="bi bi-hand-thumbs-up"></i> Vote';
+               }
+          }
+      }
+  }
+
 
   function updateWorkshopStatusUI(newStatus) {
     console.log(`Updating UI for status: ${newStatus}`);
@@ -539,21 +689,29 @@
     elements.chatInput.disabled = isPaused;
     elements.chatForm.querySelector('button').disabled = isPaused;
 
+
+    // Enable/Disable Task-Specific Inputs
+    const ideaActive = currentTaskType === 'warm-up' || currentTaskType === 'brainstorming';
+    const votingActive = currentTaskType === 'clustering_voting';
+
+
     // Enable/Disable Idea Input (only if a task is active AND not paused)
     elements.ideaInput.disabled = isPaused || !isTaskActive;
     elements.ideaSubmitBtn.disabled = isPaused || !isTaskActive;
     // Ensure idea form container visibility reflects task activity
     elements.ideaFormContainer.style.display = isTaskActive ? 'block' : 'none';
 
+    elements.clusterVotingArea.querySelectorAll('.vote-btn').forEach(btn => btn.disabled = isPaused || !votingActive);
+    // Ensure voting area visibility matches task type (handled in displayTask)
 
     // Show/hide relevant organizer buttons
     if (isOrganizer) {
         if (elements.pauseWorkshopForm) elements.pauseWorkshopForm.style.display = isInProgress ? 'inline' : 'none';
         if (elements.resumeWorkshopForm) elements.resumeWorkshopForm.style.display = isPaused ? 'inline' : 'none';
         if (elements.stopWorkshopForm) elements.stopWorkshopForm.style.display = (isInProgress || isPaused) ? 'inline' : 'none';
-        // Begin button should only be visible if no task is active and status is inprogress
-        if (elements.beginIntroForm) elements.beginIntroForm.style.display = (!isTaskActive && isInProgress) ? 'inline' : 'none';
-        // Next task button state is handled by timer logic mostly, but ensure it's hidden if no task active
+        // Begin button: show only if status is inprogress AND no task is active yet
+        if (elements.beginIntroForm) elements.beginIntroForm.style.display = (isInProgress && !isTaskActive) ? 'inline' : 'none';
+        // Next task button: state managed by timer, but hide if no task active
         if (elements.nextTaskBtn) elements.nextTaskBtn.style.display = isTaskActive ? 'inline-block' : 'none';
     }
 
@@ -563,12 +721,8 @@
         clearInterval(countdownInterval);
         countdownInterval = null;
     } else if (isInProgress && currentTaskId && !countdownInterval) {
-        // If resuming and a task is active but no timer running,
-        // request a sync to get the correct remaining time and restart timer.
-        // This is usually handled by the page reload, but as a fallback:
-        console.log("Workshop resumed, requesting timer sync...");
-        // We rely on the page reload triggered by the 'workshop_resumed' event handler.
-        // If reload wasn't used, we'd need to manually request sync here.
+        // If resuming, timer sync event should handle restarting the countdown
+        console.log("Workshop resumed, waiting for timer_sync...");
     }
   }
 
@@ -622,6 +776,10 @@
           displayTask(data); // Call displayTask for the new task
       } else { console.error("Received task_ready without task_id:", data); }
   });
+
+  socket.on('clusters_ready', (data) => displayTask(data));
+  socket.on('feasibility_ready', (data) => displayTask(data));
+  socket.on('summary_ready', (data) => displayTask(data));
 
   socket.on('timer_sync', (data) => {
       if (data.task_id === currentTaskId) {
@@ -680,6 +838,54 @@
         updateParticipantTiles(data.participants);
     } 
   });
+
+  // --- ADDED: Vote Update Handler ---
+  socket.on('vote_update', (data) => {
+      console.log("Received vote_update:", data);
+      if (data.cluster_id) {
+          updateVoteDisplay(data.cluster_id, data.total_votes, data.user_id, data.dots_remaining, data.action_taken);
+      }
+  });
+
+   // --- ADDED: Sync All Votes Handler (for joins) ---
+   socket.on('all_votes_sync', (data) => {
+       console.log("Received all_votes_sync:", data);
+       if (data.votes && currentTaskType === 'clustering_voting') {
+           for (const clusterId in data.votes) {
+               const voteCountSpan = document.getElementById(`vote-count-${clusterId}`);
+               if (voteCountSpan) {
+                   voteCountSpan.textContent = data.votes[clusterId];
+               }
+           }
+           // Also need to update button states based on user's previous votes if possible
+           // This requires fetching the user's votes for this task on join
+           // Or modifying the 'clusters_ready' payload to include user's vote status per cluster
+       }
+   });
+
+
+  // --- ADDED: Handle No Active Task ---
+  socket.on('no_active_task', () => {
+       console.log("Received no_active_task signal.");
+       currentTaskId = null;
+       currentTaskType = null;
+       elements.taskPlaceholder.style.display = 'block';
+       elements.taskContent.style.display = 'none';
+       elements.stickyBoard.style.display = 'none';
+       elements.clusterVotingArea.style.display = 'none';
+       elements.reportArea.style.display = 'none';
+       elements.ideaFormContainer.style.display = 'none';
+       elements.userDotsDisplay.style.display = 'none';
+       clearCountdown();
+       if (isOrganizer && elements.beginIntroForm && workshopStatus === 'inprogress') {
+           elements.beginIntroForm.style.display = 'inline-block'; // Show Begin button if workshop started but no task active
+       }
+       if (elements.nextTaskBtn) elements.nextTaskBtn.style.display = 'none';
+   });
+
+
+
+
 
   // --- Event Listeners (DOM Ready) ---
   document.addEventListener('DOMContentLoaded', () => {
@@ -851,8 +1057,21 @@
       // to populate the initial state if a task is already active.
 
 
-    // Chat Form Submission
-    if (elements.chatForm) { /* (Keep as is) */ }
+    // Chat Form
+    if (elements.chatForm) {
+        elements.chatForm.addEventListener('submit', e => {
+          e.preventDefault();
+          const msg = elements.chatInput.value.trim();
+          if (!msg) return;
+          socket.emit('send_message', {
+            room: roomName,
+            message: msg,
+            user_id: userId,
+            workshop_id: workshopId
+          });
+          elements.chatInput.value = '';
+        });
+    }
 
       // --- Idea Submission Form Listener ---
       if (elements.ideaForm) {
@@ -915,16 +1134,13 @@
           console.error("#idea-form not found on page load.");
       }
 
-      // ... (keep beforeunload listener) ...
+
 
       // --- Initial UI setup ---
       console.log("DOM Content Loaded. Initializing UI.");
       updateWorkshopStatusUI(workshopStatus);
       console.log(`Initial state: Task ID = ${currentTaskId}, Status = ${workshopStatus}`);
-      // The join_room logic in sockets.py should emit necessary events (task, timer, whiteboard)
-      // to populate the initial state if a task is already active.
-
-
+      // Socket join logic will trigger state sync events (task, timer, whiteboard/clusters, chat)
   }); // End DOMContentLoaded
 
 </script>
