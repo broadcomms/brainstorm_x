@@ -58,7 +58,7 @@ def generate_action_plan_text(workshop_id, force: bool = False):
     Generates or retrieves a structured action plan as a valid JSON array.
     Ensures output is clean, structured, and stored in the database.
     """
-
+    print(f"[Agent] Generating action plan for workshop {workshop_id} (force={force})") # DEBUG CODE
     workshop = Workshop.query.get_or_404(workshop_id)
 
     if workshop.generated_action_plan and not force:
@@ -104,7 +104,7 @@ Workshop Context:
     chain = action_plan_prompt | watsonx_llm_action_plan
 
     raw_output = chain.invoke({"pre_workshop_data": pre_workshop_data})
-    current_app.logger.debug(f"[Agent] Workshop raw action plan for {workshop_id}: {raw_output}")
+    current_app.logger.debug(f"[Agent] Workshop raw action plan output for {workshop_id}: {raw_output}")
 
     cleaned_json_string = extract_json_block(raw_output)
     
@@ -278,36 +278,46 @@ def generate_next_task_text(workshop_id, action_plan_item=None):
         # Return as JSON string to match expected format in routes.py
         return json.dumps({"error": "Workshop data unavailable."})
 
+
+
+    ############# DECIDE NEXT TASK BASED ON ACTION PLAN ITEM #############
+
+
     # --- Modify Prompt Based on Action Plan Item ---
     if action_plan_item and isinstance(action_plan_item, dict):
         phase_context = f"""
-Current Action Plan Phase:
-- Phase Name: {action_plan_item.get('phase', 'N/A')}
-- Phase Description: {action_plan_item.get('description', 'N/A')}
+            Current Action Plan Phase:
+            - Phase Name: {action_plan_item.get('phase', 'N/A')}
+            - Phase Description: {action_plan_item.get('description', 'N/A')}
 
-Based on this specific phase and the overall workshop context, create the next task.
-"""
+            Based on this specific phase and the overall workshop context, create the next task.
+            """
     else:
-        phase_context = "Create the next logical task for the workshop based on the overall context."
+        phase_context = "Idea Generation"
     # ---------------------------------------------
-
+    
+    
+    print(f"[Agent] phase_context: {phase_context} for workshop {workshop_id}...")   
+    
+     
     prompt_template = f"""
-You are the facilitator for a brainstorming workshop.
+                        You are the facilitator for a brainstorming workshop.
 
-Workshop Context:
-{{pre_workshop_data}}
+                        Current Action Plan Context:
+                        {phase_context}
+                        
+                        Workshop Context:
+                        {{pre_workshop_data}}
 
-{phase_context}
+                        Produce output as a valid JSON object with these keys:
+                        - title: A very short, engaging title for this task (related to the current phase if provided).
+                        - task_type: brainstorming
+                        - task_description: The specific question or prompt participants should address for this task. Make it actionable.
+                        - instructions: Clear, concise instructions on how participants should contribute (e.g., "Submit your ideas individually using the input field below.").
+                        - task_duration: Suggested time for this task in SECONDS (e.g., 180 for 3 minutes, 300 for 5 minutes). Be realistic based on the task.
 
-Produce output as a valid JSON object with these keys:
-- title: A very short, engaging title for this task (related to the current phase if provided).
-- task_type: The type of activity (e.g., "Brainstorming", "Idea Grouping", "Prioritization", "Discussion").
-- task_description: The specific question or prompt participants should address for this task. Make it actionable.
-- instructions: Clear, concise instructions on how participants should contribute (e.g., "Submit your ideas individually using the input field below.").
-- task_duration: Suggested time for this task in SECONDS (e.g., 180 for 3 minutes, 300 for 5 minutes). Be realistic based on the task type.
-
-Respond with *only* the valid JSON object, nothing else before or after.
-"""
+                        Respond with *only* the valid JSON object, nothing else before or after.
+                        """
     # Ensure the placeholder is correctly formatted for PromptTemplate
     prompt_template_formatted = prompt_template.replace("{pre_workshop_data}", "{pre_workshop_data}")
 
