@@ -103,6 +103,7 @@ from app.sockets import (
     emit_task_ready,
     emit_clusters_ready,        # New emitter for cluster/voting phase
     emit_feasibility_ready,     # New emitter for feasibility phase
+    emit_discussion_ready,     # New emitter for discussion phase
     emit_summary_ready,         # New emitter for summary phase
     emit_workshop_paused,
     emit_workshop_resumed,
@@ -116,11 +117,16 @@ from app.sockets import (
 
 from app.config import TASK_SEQUENCE # <-- Import from config
 
+# --- Import New Service Payload Functions ---
+from app.service.routes.brainstorming import get_brainstorming_task_payload
+from app.service.routes.clustering import get_clustering_voting_payload
+from app.service.routes.feasibility import get_feasibility_payload
+from app.service.routes.discussion import get_discussion_payload
+from app.service.routes.summary import get_summary_payload 
 
 
-
-
-
+# --- ADDED: Import specific emitters if not already there ---
+from app.sockets import emit_timer_sync # Import timer sync emitter
 
 
 def load_or_schedule_ai_content(workshop, attr, generator_func, event_type):
@@ -1717,6 +1723,13 @@ def next_task(workshop_id):
     # Ensure the workshop is in progress
     if workshop.status != "inprogress":
         return jsonify({"error": "Workshop is not in progress."}), 400
+    
+        # --- Mark previous task as completed ---
+    if workshop.current_task_id:
+        previous_task = BrainstormTask.query.get(workshop.current_task_id)
+        if previous_task and previous_task.status == 'running':
+            previous_task.status = 'completed'
+            previous_task.ended_at = datetime.utcnow()
 
     # Load the task sequence
     task_sequence = TASK_SEQUENCE
@@ -1740,56 +1753,82 @@ def next_task(workshop_id):
     # Determine the next task type
     next_task_type = task_sequence[next_index] # Use next_index
     task_payload = None
-    task_function = None # To store the function to call
+    current_app.logger.info(f"TRACING BREAK POINT: next_task_type: {next_task_type}") # Log next index
+    error_message = None
+    status_code = 500
     current_app.logger.info(f"TRACING BREAK POINT: next_task_type: {next_task_type}") # Log next index
     
-    
-    
+    # --- Get Phase Context for LLM ---
+    action_plan_json = workshop.task_sequence or '[]'
+    try:
+        action_plan_list = json.loads(action_plan_json)
+        phase_data = action_plan_list[next_index] if 0 <= next_index < len(action_plan_list) else {}
+        phase_context = f"Phase: {phase_data.get('phase', 'N/A')}\nDescription: {phase_data.get('description', 'N/A')}"
+    except (json.JSONDecodeError, IndexError):
+        phase_context = f"Task Type: {next_task_type}" # Fallback context
+    # -----------------------------------
     
     
     
     # --- Map task types to functions ---
     if next_task_type == "brainstorming":
-        task_payload = get_brainstorming_task_payload(workshop_id)
-        
+            result = get_brainstorming_task_payload(workshop_id, phase_context)
     elif next_task_type == "clustering_voting":
-        # Need to fetch ideas from the previous brainstorming task first
         previous_task_id = workshop.current_task_id
         if not previous_task_id:
-             return jsonify({"error": "Cannot start clustering/voting without a completed brainstorming task."}), 400
-        ideas = BrainstormIdea.query.filter_by(task_id=previous_task_id).all()
-        if not ideas:
-             return jsonify({"error": "No ideas found from the previous task to cluster."}), 400
-        # Pass ideas to the generator function
-        task_payload = '' # generate_clusters_and_voting_task(workshop_id, ideas) # Call directly for now
-        # Note: This assumes generate_clusters_and_voting_task handles DB saving & returns payload or error tuple
+            result = ("Cannot start clustering without a previous task.", 400)
+        else:
+            result = get_clustering_voting_payload(workshop_id, previous_task_id, phase_context)
     elif next_task_type == "results_feasibility":
-         # Need to fetch clusters and votes from the previous task
-        task_payload = '' # workshop.current_task_id # Assuming the voting task updates current_task_id
+        previous_task_id = workshop.current_task_id
         if not previous_task_id:
-             return jsonify({"error": "Cannot start feasibility without a completed voting task."}), 400
-        # Fetch clusters associated with the workshop (or task if linked) including vote counts
-        clusters_with_votes = IdeaCluster.query.filter_by(workshop_id=workshop_id).options(selectinload(IdeaCluster.votes)).all() # Adjust filter if needed
-        if not clusters_with_votes:
-             return jsonify({"error": "No clusters found from the previous task."}), 400
-        #task_payload = generate_feasibility_task(workshop_id, clusters_with_votes) # Call directly
+            result = ("Cannot start feasibility without a previous task.", 400)
+        else:
+            result = get_feasibility_payload(workshop_id, previous_task_id, phase_context)
     elif next_task_type == "discussion":
-        task_payload = '' #  generate_discussion_task(workshop_id) # Call directly
+            result = get_discussion_payload(workshop_id, phase_context)
     elif next_task_type == "summary":
-        task_payload = '' #  = generate_summary_task(workshop_id) # Call directly
+            result = get_summary_payload(workshop_id, phase_context)
     else:
-        return jsonify({"error": f"Unsupported task type: {next_task_type}"}), 400
+        result = (f"Unsupported task type: {next_task_type}", 400)
     # -----------------------------------
 
-    # --- Call the selected function if not already called ---
-    if task_function:
-        task_payload = task_function(workshop_id)
-    # ------------------------------------------------------
 
-    # Handle errors from the task generation function
-    if isinstance(task_payload, tuple):
-        error_message, status_code = task_payload
+
+    # --- Handle result from service function ---
+    if isinstance(result, tuple):
+        error_message, status_code = result
         return jsonify({"error": error_message}), status_code
+
+    elif isinstance(result, dict):
+        task_payload = result
+    else:
+        # Should not happen if service functions are correct
+        return jsonify({"error": "Internal error generating task payload."}), 500
+    # ------------------------------------------
+
+    # --- Update Workshop State ---
+    new_task_id = task_payload.get('task_id')
+    if not new_task_id:
+        current_app.logger.error(f"Task payload for {next_task_type} missing 'task_id'. Payload: {task_payload}")
+        return jsonify({"error": "Internal error: Task ID missing after generation."}), 500
+
+    new_task = BrainstormTask.query.get(new_task_id)
+    if not new_task:
+        current_app.logger.error(f"Could not find newly created task with ID {new_task_id}")
+        return jsonify({"error": "Internal error: Failed to retrieve new task."}), 500
+
+    workshop.current_task_id = new_task_id
+    workshop.current_task_index = next_index
+    workshop.timer_start_time = datetime.utcnow() # Set timer start
+    workshop.timer_paused_at = None
+    workshop.timer_elapsed_before_pause = 0
+    new_task.status = 'running' # Mark the new task as running
+    new_task.started_at = workshop.timer_start_time
+
+    db.session.commit() # Commit workshop update and task status/start time
+    current_app.logger.info(f"Workshop {workshop_id} advanced to task {new_task_id} (Index: {next_index}, Type: {next_task_type})")
+    # ---------------------------
 
     # --- Determine Emitter based on task_type ---
     room = f"workshop_room_{workshop_id}"
@@ -1802,7 +1841,7 @@ def next_task(workshop_id):
     elif task_type_in_payload == "results_feasibility":
         emit_feasibility_ready(room, task_payload) # Use specific emitter
     elif task_type_in_payload == "discussion":
-        emit_task_ready(room, task_payload) # Re-use generic task emitter? Or create specific?
+        emit_discussion_ready(room, task_payload) # Use specific emitter
     elif task_type_in_payload == "summary":
         emit_summary_ready(room, task_payload) # Use specific emitter
     else:
@@ -1810,12 +1849,13 @@ def next_task(workshop_id):
         return jsonify({"error": "Internal error: Unknown task type generated."}), 500
     # ------------------------------------------
 
-    # Update the workshop's current task index *after* successful generation and emission
-    workshop.current_task_index = next_index # Update to the index of the task just started
-    # The task_payload should contain the new task_id, which was set in get_brainstorming_task_payload
-    # For other task types, ensure their respective functions also update workshop.current_task_id
-    # workshop.current_task_id = task_payload.get('task_id') # This is handled within the task generation functions now
 
+    # --- Emit Timer Sync Immediately After Task Start ---
+    emit_timer_sync(room, {
+        "task_id": new_task_id,
+        "remaining_seconds": new_task.duration,
+        "is_paused": False
+    })
     db.session.commit()
 
     return jsonify({"success": True, "task": task_payload})

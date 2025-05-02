@@ -517,7 +517,7 @@
         elements.leftColumnTitle.textContent = "Discussion";
     } else if (currentTaskType === 'summary') {
         elements.taskBody.innerHTML = `
-            <p class="fs-5 mb-2">${description || 'Workshop Summary:'}</p>
+            <p class="fs-5 mb-2">${data.title || 'Workshop Summary:'}</p>
             <p class="mb-1"><strong>Instructions:</strong></p>
             <p>${instructions || 'Thank you for your participation!'}</p>`;
         elements.leftColumnTitle.textContent = "Workshop Summary";
@@ -536,12 +536,14 @@
 
     // --- Manage Input Form and Organizer Buttons ---
     const isPaused = workshopStatus === 'paused';
+    const ideaInputActive = currentTaskType === 'warm-up' || currentTaskType === 'brainstorming';
+
     elements.ideaInput.value = ''; // Clear previous input
-    elements.ideaFormContainer.style.display = 'block';
 
-    elements.ideaSubmitBtn.disabled = isPaused || currentTaskType !== 'warm-up' && currentTaskType !== 'brainstorming';
-    elements.ideaInput.disabled = isPaused || currentTaskType !== 'warm-up' && currentTaskType !== 'brainstorming';
 
+    elements.ideaFormContainer.style.display = ideaInputActive ? 'block' : 'none'; // Show only if idea input is active
+    elements.ideaSubmitBtn.disabled = isPaused || !ideaInputActive;
+    elements.ideaInput.disabled = isPaused || !ideaInputActive;
 
     // --- Manage Organizer Buttons ---
     if (isOrganizer) {
@@ -698,11 +700,12 @@
 
 
     // Enable/Disable Task-Specific Inputs
-    const ideaActive = currentTaskType === 'warm-up' || currentTaskType === 'brainstorming';
+    const ideaInputActive = currentTaskType === 'warm-up' || currentTaskType === 'brainstorming';
+   
     const votingActive = currentTaskType === 'clustering_voting';
 
 
-    // Enable/Disable Idea Input (only if a task is active AND not paused)
+    // Enable/Disable Idea Input (only if idea task is active AND not paused)
     elements.ideaInput.disabled = isPaused || !isTaskActive;
     elements.ideaSubmitBtn.disabled = isPaused || !isTaskActive;
     // Ensure idea form container visibility reflects task activity
@@ -787,6 +790,7 @@
   socket.on('clusters_ready', (data) => displayTask(data));
   socket.on('feasibility_ready', (data) => displayTask(data));
   socket.on('summary_ready', (data) => displayTask(data));
+  socket.on('discussion_ready', (data) => displayTask(data));
 
   socket.on('timer_sync', (data) => {
       if (data.task_id === currentTaskId) {

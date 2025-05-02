@@ -184,6 +184,11 @@ def emit_summary_ready(room: str, payload: dict):
     current_app.logger.info(f"Emitted summary_ready to {room} for task {payload.get('task_id')}")
 
 
+def emit_discussion_ready(room: str, payload: dict):
+    """Emits discussion task payload."""
+    socketio.emit("discussion_ready", payload, to=room)
+    current_app.logger.info(f"Emitted discussion_ready to {room} for task {payload.get('task_id')}")
+
 
 
 
@@ -317,7 +322,8 @@ def _on_join_room(data):
                 event_name = "feasibility_ready"
             elif current_task_type == "summary":
                 event_name = "summary_ready"
-            # else: event_name remains "task_ready" for brainstorming, discussion
+            elif current_task_type == "discussion":
+                event_name = "discussion_ready"
 
             current_app.logger.debug(f"Emitting {event_name} to {sid} for task {task.id}")
             emit(event_name, payload, to=sid)
@@ -330,7 +336,7 @@ def _on_join_room(data):
             }, to=sid)
 
             # --- Emit Whiteboard/Cluster Content ---
-            if current_task_type in ["warm-up", "brainstorming"]:
+            if current_task_type in ["warm-up", "brainstorming", "discussion"]:
                 # Emit ideas for brainstorming/warmup
                 ideas = BrainstormIdea.query.options(
                     selectinload(BrainstormIdea.participant).selectinload(WorkshopParticipant.user)
@@ -346,11 +352,14 @@ def _on_join_room(data):
 
             elif current_task_type == "clustering_voting":
                  # For voting phase, whiteboard shows clusters, not individual ideas
-                 # The cluster data is already in the 'clusters_ready' payload.
-                 # We might need to emit vote counts separately if not included initially.
-                 clusters_with_votes = IdeaCluster.query.filter_by(task_id=task.id).all() # Removed selectinload for dynamic 'votes'
+                 # The cluster data is in 'clusters_ready'. Emit current vote counts.
+                 clusters_with_votes = db.session.query(
+                        IdeaCluster, func.count(IdeaVote.id).label('vote_count')
+                    ).outerjoin(IdeaVote, IdeaCluster.id == IdeaVote.cluster_id)\
+                    .filter(IdeaCluster.task_id == task.id)\
+                    .group_by(IdeaCluster.id).all()
                  votes_payload = {
-                     cluster.id: len(cluster.votes) for cluster in clusters_with_votes
+                     cluster.id: count for cluster, count in clusters_with_votes
                  }
                  emit("all_votes_sync", {"votes": votes_payload}, to=sid) # New event for initial vote counts
                  current_app.logger.debug(f"Emitted all_votes_sync with counts for {len(votes_payload)} clusters to {sid}")
@@ -492,6 +501,13 @@ def emit_workshop_resumed(room: str, workshop_id: int):
     """Notifies clients the workshop is resumed."""
     socketio.emit("workshop_resumed", {"workshop_id": workshop_id}, to=room)
     current_app.logger.info(f"Emitted workshop_resumed to {room}")
+
+# --- ADDED: Timer Sync Emitter ---
+def emit_timer_sync(room: str, payload: dict):
+    """Emits timer synchronization data."""
+    socketio.emit("timer_sync", payload, to=room)
+    current_app.logger.debug(f"Emitted timer_sync to {room}: {payload}")
+
 
 # --- ADDED: Generic Status Update Emitter ---
 def emit_workshop_status_update(room: str, workshop_id: int, status: str):
