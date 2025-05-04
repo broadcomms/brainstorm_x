@@ -63,19 +63,27 @@
       <!-- Flow control area: Organizer Buttons & Timer -->
       <div class="d-flex justify-content-between align-items-center mb-3">
         <div> {# Organizer Controls #}
+
+          
           {% if is_organizer_flag %}
             <form 
                 id="begin-intro-form" 
                 class="d-inline me-2" 
                 action="{{ url_for('workshop_bp.begin_intro', workshop_id=workshop.id) }}" 
                 method="POST" 
-                style="display: none;"> {# Hidden initially #}
-
-
+                style="display: block;">
               <button type="submit" class="btn btn-sm btn-info">Begin Workshop</button>
             </form>
-            <button id="next-task-btn" class="btn btn-sm btn-secondary" disabled>Next Task</button> {# Disabled initially #}
+            <button 
+            id="next-task-btn" 
+              class="btn btn-sm btn-secondary" 
+              disabled 
+              style="display: none;">
+            Next Task
+          </button>
           {% endif %}
+
+
         </div>
         <div id="timer-display" class="text-end"> {# Timer #}
           <small id="timer-text" class="text-muted h1 font-monospace">--:--</small>
@@ -211,6 +219,55 @@
 
   };
 
+
+
+
+// Helper to read duration from any payload.
+function _getDuration(payload) {
+  return parseInt(
+    payload.duration || payload.task_duration || payload.taskDuration || 0,
+    10
+  );
+}
+
+
+// --- Timer utility functions for synchronized countdown ---
+function clearCountdown() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+}
+
+function updateTimerDisplay(seconds) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const secs    = (seconds % 60).toString().padStart(2, '0');
+  elements.timerText.textContent = `${minutes}:${secs}`;
+}
+
+function startCountdown(remainingSeconds, originalDuration) {
+  clearCountdown();
+  let remaining = remainingSeconds;
+  totalDurationForCurrentTask = originalDuration;
+
+  // Immediately render the starting point
+  updateTimerDisplay(remaining);
+  const elapsed0 = originalDuration - remaining;
+  elements.progressBar.style.width = ((elapsed0 / originalDuration) * 100) + '%';
+
+  countdownInterval = setInterval(() => {
+    remaining -= 1;
+    if (remaining < 0) {
+      clearCountdown();
+      return;
+    }
+    updateTimerDisplay(remaining);
+    const elapsed = originalDuration - remaining;
+    const pct     = (elapsed / originalDuration) * 100;
+    elements.progressBar.style.width = pct + '%';
+  }, 1000);
+}
+
   // --- Utility Functions (postForm, clearCountdown, addStickyNote, updateParticipantTiles, appendChatMessage) ---
   // (Keep these as they were in the previous correct version)
   // ...
@@ -344,6 +401,40 @@
           elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
       }
   }
+
+
+  // --- New: task‑completion handler ---
+  function handleTaskCompletion() {
+      // Only act when the introduction (warm‑up) task finishes
+      if (currentTaskType === 'warm-up' || currentTaskType === 'introduction') {
+          /* Hide “Begin Workshop / Workshop Started” button */
+          if (elements.beginIntroForm) {
+              elements.beginIntroForm.style.display = 'none';
+          }
+          /* Show & enable “Next Task” button */
+          if (elements.nextTaskBtn) {
+              elements.nextTaskBtn.style.display = 'inline-block';
+              elements.nextTaskBtn.disabled = false;
+              
+          }
+          /* Tell the server the task has ended (organizer only) */
+          if (isOrganizer === 'true' && currentTaskId) {
+              socket.emit('task_completed', {
+                  workshop_id: workshopId,
+                  task_id: currentTaskId,
+                  room: roomName
+              });
+          }
+      }
+  }
+
+
+
+
+
+
+
+
   // --- Core UI Update Functions ---
 
   function startOrSyncCountdown(remainingSeconds, totalDuration) {
@@ -374,9 +465,16 @@
         const pct = totalDurationForCurrentTask > 0
             ? Math.min(100, Math.max(0, (elapsed / totalDurationForCurrentTask) * 100))
             : 0;
-        elements.progressBar.style.width = `${pct}%`;
-    }
+            elements.progressBar.style.width = `${pct}%`;
 
+            // --- Updated countdown logic for warm-up/introduction ---
+            if (remaining <= 0) {
+                clearCountdown();
+                handleTaskCompletion();
+                return;
+            }
+            remaining--;
+}
     updateTimerDisplay(); // Show initial time immediately
 
     if (remaining <= 0) {
@@ -422,10 +520,14 @@
         elements.ideaInput.disabled = true;
     }
 
-      // Enable "Next Task" button for organizer
+      // Enable and show "Next Task" button for organizer, hide "Begin Workshop"
       if (isOrganizer && elements.nextTaskBtn) {
-          elements.nextTaskBtn.disabled = false; 
+          elements.nextTaskBtn.disabled = false;
           elements.nextTaskBtn.innerHTML = 'Next Task';
+          elements.nextTaskBtn.style.display = 'inline-block';
+          if (elements.beginIntroForm) {
+              elements.beginIntroForm.style.display = 'none';
+          }
       }
   }
 
@@ -775,22 +877,59 @@
 
   // Task start events
   socket.on('introduction_start', (data) => {
+
+    displayTask(data);
+    if (isOrganizer) {
+      // Hide the Begin button, show Next (disabled until timer end)
+      elements.beginIntroForm.style.display = 'none';
+      elements.nextTaskBtn.style.display = 'inline-block';
+      elements.nextTaskBtn.disabled = true;
+    }
+
+
+
       if (data.task_id) {
           console.log("Received introduction_start:", data);
           displayTask(data);
+
+          const originalDuration = _getDuration(data);
+          const remaining       = data.remaining_seconds ?? originalDuration;
+          startCountdown(remaining, originalDuration);
       } else { console.error("Received introduction_start without task_id:", data); }
   });
-  socket.on('task_ready', (data) => {
-      if (data.task_id) {
-          console.log("Received task_ready:", data);
-          displayTask(data); // Call displayTask for the new task
-      } else { console.error("Received task_ready without task_id:", data); }
-  });
 
-  socket.on('clusters_ready', (data) => displayTask(data));
-  socket.on('feasibility_ready', (data) => displayTask(data));
-  socket.on('summary_ready', (data) => displayTask(data));
-  socket.on('discussion_ready', (data) => displayTask(data));
+  socket.on('task_ready', payload => {
+    console.log('[Socket] task_ready', payload);
+    displayTask(payload);
+
+    const dur = _getDuration(payload);
+    startOrSyncCountdown(dur, dur);
+
+    // Stop spinner but keep disabled until task ends
+    if (elements.nextTaskBtn) {
+      elements.nextTaskBtn.innerHTML = 'Next Task';
+      elements.nextTaskBtn.disabled = true;
+    }
+});
+
+['clusters_ready','discussion_ready','feasibility_ready','summary_ready']
+  .forEach(evt =>
+    socket.on(evt, payload => {
+      console.log(`[Socket] ${evt}`, payload);
+      displayTask(payload);
+      const d = _getDuration(payload);
+      startOrSyncCountdown(d, d);
+      if (elements.nextTaskBtn) {
+        elements.nextTaskBtn.innerHTML = 'Next Task';
+        elements.nextTaskBtn.disabled = true;
+      }
+    })
+  );
+
+  //socket.on('clusters_ready', (data) => displayTask(data));
+  //socket.on('feasibility_ready', (data) => displayTask(data));
+  //socket.on('summary_ready', (data) => displayTask(data));
+  //socket.on('discussion_ready', (data) => displayTask(data));
 
   socket.on('timer_sync', (data) => {
       if (data.task_id === currentTaskId) {
@@ -997,55 +1136,40 @@
       }
     }
 
-  // Next Task Button (Organizer only)
- // --- Next Task Button Listener ---
- if (elements.nextTaskBtn) {
-          elements.nextTaskBtn.addEventListener('click', async () => {
-              console.log("[ Next Task ] Next task button clicked.");
-              if (!isOrganizer) return; // Should be disabled anyway, but double-check
+    if (elements.nextTaskBtn) {
+  elements.nextTaskBtn.addEventListener('click', onNextTaskClick);
+}
 
-              elements.nextTaskBtn.disabled = true;
-              elements.nextTaskBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+function onNextTaskClick(e) {
+  e.preventDefault();
+  const btn = elements.nextTaskBtn;
+  if (!btn || btn.disabled) return;
 
-              try {
-                  const response = await fetch(`/workshop/${workshopId}/next_task`, {
-                      method: 'POST',
-                      headers: {
-                          'X-Requested-With': 'XMLHttpRequest',
-                          'Accept': 'application/json'
-                      }
-                  });
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML =
+    '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading…';
 
-                  const contentType = response.headers.get("content-type");
-                  if (response.ok && contentType && contentType.includes("application/json")) {
-                      const data = await response.json();
-                      if (data.success) {
-                        console.log("[ Next Task ] Next task started successfully. waiting for task_ready event...");
-                          // SUCCESS: DO NOTHING HERE. UI updates via 'task_ready' socket event.
-                          // Button remains disabled until timer ends for the *new* task.
-                      } else {
-                           throw new Error(data.message || '[ Next Task ] Failed to start next task (server error).');
-                      }
-                  } else if (!response.ok) {
-                      const errorText = await response.text();
-                      console.error(`[ Next Task ] HTTP error ${response.status} requesting next task: ${errorText}`);
-                      throw new Error(`[ Next Task ] HTTP error ${response.status}`);
-                  } else {
-                      console.warn("[ Next Task ] Received non-JSON success response for next_task.");
-                  }
-              } catch (err) {
-                  console.error("[ Next Task ] Error:", err);
-                  alert('[ Next Task ] Error starting next task service: ' + err.message);
-                  // Re-enable button ONLY on error
-                  elements.nextTaskBtn.disabled = false;
-                  elements.nextTaskBtn.innerHTML = 'Next Task';
-              }
-              // NOTE: No 'finally' block. Button state is managed by timer end and task start.
-          });
-          console.log("[ Next Task ] Attached click listener to UI Button: #next-task-btn");
-      } else if (isOrganizer) {
-          console.log("[ Next Task ] UI Button (#next-task-btn) not found. Expected for organizer.");
+  fetch(`/workshop/${workshopId}/next_task`, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(r => r.json().catch(() => ({})))
+    .then(data => {
+      if (!data.success) {
+        alert(data.message || 'Failed to advance to next task.');
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
       }
+      /* on success we wait for task_ready from the server
+         to restore the button */
+    })
+    .catch(err => {
+      alert(err.message || 'Network error.');
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    });
+}
 
 
 

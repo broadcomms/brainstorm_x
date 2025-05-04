@@ -66,7 +66,7 @@ Produce output as a *single* valid JSON object with these keys:
 - task_type: "summary"
 - task_description: "Here is a summary of the workshop session."
 - instructions: "Thank you for your participation! The workshop is now complete."
-- task_duration: Suggested time in SECONDS for review (e.g., 120 for 2 mins).
+- task_duration: The time allocated for the task which is 1 minute, in seconds (e.g., 60 for 1 minute).
 - summary_report: A string containing the Markdown summary report.
 
 Respond with *only* the valid JSON object, nothing else.

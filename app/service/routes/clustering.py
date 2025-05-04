@@ -41,7 +41,7 @@ Produce output as a *single* valid JSON object with these keys:
 - task_type: "clustering_voting"
 - task_description: "Ideas have been grouped into clusters. Review them and prepare to vote."
 - instructions: "Use your assigned dots to vote for the clusters you find most promising. Click a cluster's vote button."
-- task_duration: Suggested time in SECONDS for voting (e.g., 180 for 3 mins, 300 for 5 mins).
+- task_duration: The time allocated for the task which is 1 minute, in seconds (e.g., 60 for 1 minute).
 - clusters: An array of cluster objects. Each cluster object must have:
     - name: A concise name for the cluster (string).
     - description: A brief explanation of the cluster's theme (string, optional).
@@ -49,7 +49,11 @@ Produce output as a *single* valid JSON object with these keys:
 
 Respond with *only* the valid JSON object, nothing else. Ensure 'idea_indices' refers to the 0-based index from the input list.
 """
+# Force task duration to 1 minutes for clustering voting
+#- task_duration: Suggested time in SECONDS for voting (e.g., 180 for 3 mins, 300 for 5 mins).
 
+
+    # Initialize Watsonx LLM
     watsonx_llm = WatsonxLLM(
         model_id=Config.WATSONX_MODEL_ID_2, # Use appropriate model
         url=Config.WATSONX_URL,

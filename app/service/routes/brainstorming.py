@@ -34,11 +34,15 @@ Produce output as a valid JSON object with these keys:
 - task_type: "brainstorming"
 - task_description: The specific question or prompt participants should address. Make it actionable and focused on the current phase.
 - instructions: Clear, concise instructions (e.g., "Submit your ideas individually using the input field below.").
-- task_duration: Suggested time in SECONDS (e.g., 180 for 3 mins, 300 for 5 mins).
+- task_duration: The time allocated for the task which is 60 seconds (1 minute).
 
 Respond with *only* the valid JSON object, nothing else.
 """
-
+    # Force task duration to 1 minutes for brainstorming 
+    # - task_duration: Suggested time in SECONDS (e.g., 60 for 1 mins, 120 for 2 mins).
+    #
+    
+    
     watsonx_llm = WatsonxLLM(
         model_id=Config.WATSONX_MODEL_ID_1, # Use appropriate model
         url=Config.WATSONX_URL,

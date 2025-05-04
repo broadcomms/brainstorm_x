@@ -39,7 +39,7 @@ Produce output as a *single* valid JSON object with these keys:
 - task_type: "discussion"
 - task_description: The main question or topic for discussion (e.g., "Let's discuss the feasibility findings and potential next steps.").
 - instructions: How participants should engage (e.g., "Use the chat window to share your thoughts, ask questions, and respond to others.").
-- task_duration: Suggested time in SECONDS for discussion (e.g., 600 for 10 mins).
+- task_duration: The time allocated for the task which is 1 minute, in seconds (e.g., 60 for 1 minute).
 
 Respond with *only* the valid JSON object, nothing else.
 """

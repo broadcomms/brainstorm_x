@@ -1807,6 +1807,23 @@ def next_task(workshop_id):
         return jsonify({"error": "Internal error generating task payload."}), 500
     # ------------------------------------------
 
+
+    current_app.logger.debug(f"Task payload before override: {task_payload}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     # --- Update Workshop State ---
     new_task_id = task_payload.get('task_id')
     if not new_task_id:

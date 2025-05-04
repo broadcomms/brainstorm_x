@@ -10,7 +10,7 @@ app = create_app()
 # Configure logging to include line number
 logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s',
-    level=logging.DEBUG
+    level=logging.INFO
 )
 
 

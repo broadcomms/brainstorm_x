@@ -43,7 +43,7 @@ Produce output as a *single* valid JSON object with these keys:
 - task_type: "results_feasibility"
 - task_description: "Review the feasibility analysis of the top-voted clusters and prepare for discussion."
 - instructions: "Read the report below. Consider the assessments and think about potential next steps or questions."
-- task_duration: Suggested time in SECONDS for review (e.g., 240 for 4 mins).
+- task_duration: The time allocated for the task which is 1 minute, in seconds (e.g., 60 for 1 minute).
 - feasibility_report: A string containing the Markdown feasibility report.
 
 Respond with *only* the valid JSON object, nothing else.

@@ -43,5 +43,5 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER", "no-reply@broadcomms.net")
     
     # Set to a number (string) of seconds to override task duration, or None/empty to disable
-    DEBUG_OVERRIDE_TASK_DURATION = "15" # Example: Override all tasks to 15 seconds
+    DEBUG_OVERRIDE_TASK_DURATION = "30" # Example: Override all tasks to 15 seconds
     # DEBUG_OVERRIDE_TASK_DURATION = None # Disable override
