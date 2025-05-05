@@ -40,7 +40,22 @@
     try {
       data = JSON.parse(jsonString);
     } catch (e) {
-      console.error('Failed to parse agenda JSON:', e, '\nExtracted JSON:', jsonString, '\nRaw data:', raw);
+      // console.error('Failed to parse agenda JSON:', e, '\nExtracted JSON:', jsonString, '\nRaw data:', raw); //DEBUG CODE
+      // Optionally, display an error message in the UI
+      const container = document.getElementById('agenda-titles-list');
+      //container.innerHTML = '<li class="list-group-item text-danger">Error loading agenda data.</li>';
+      // Check if jsonString is text
+      if (typeof jsonString === 'string') {
+        // Split the raw JSON string into lines
+        const lines = jsonString.split('\n');
+        // Create a list item for each line
+        lines.forEach(line => {
+          const li = document.createElement('li');
+          li.className = 'list-group-item';
+          li.textContent = line.trim(); // Add each line as a list item
+          container.appendChild(li);
+        });
+      }
       return;
     }
 

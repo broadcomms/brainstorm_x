@@ -636,7 +636,33 @@
   socket.on('ai_content_update', (data) => {
     console.log('[Details] AI content update received:', data);
     if (data.workshop_id === workshopId && data.type === 'agenda' && data.content) {
-        updateAiContentElement('agenda', data.content);
+        elementId = 'agenda-titles-list'; // Use the same ID as in workshop_lobby.html
+        const element = document.getElementById(elementId);
+       updateAiContentElement('agenda', data.content);
+       if (element) {
+            if (data.type === 'agenda') {
+                // Update agenda list dynamically
+                try {
+                    const agendaItems = JSON.parse(data.content).agenda || [];
+                    element.innerHTML = ''; // Clear existing content
+                    agendaItems.forEach(item => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        li.textContent = item.activity; // Use the "activity" field
+                        element.appendChild(li);
+                    });
+                } catch (e) {
+                    console.error('Failed to parse agenda JSON:', e);
+                }
+            } else {
+                // Update other content types directly
+                element.innerHTML = data.content;
+            }
+            console.log(`Updated UI for ${data.type}`);
+        } else {
+            console.warn(`Element with ID '${elementId}' not found for AI content type: ${data.type}`);
+        }
+
     }
 });
 
