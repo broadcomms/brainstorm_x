@@ -114,7 +114,12 @@
             // 6. Agenda
             const agendaTextarea = document.querySelector('textarea[name="agenda"]');
             if (agendaTextarea) {
-                agendaTextarea.value = '';
+                agendaTextarea.value =  'Introduction and Warmup\n' +
+                                        'Brainstorming\n' +
+                                        'Clustering and Voting\n' +
+                                        'Feasibility Analysis\n' +
+                                        'Summary and Closing';
+                // Note: Use \n for line breaks in textareas
                 console.log('Auto-filled agenda.');
             }
         }

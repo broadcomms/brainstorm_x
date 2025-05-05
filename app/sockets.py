@@ -19,6 +19,11 @@ from .config import TASK_SEQUENCE # <-- ADD THIS IMPORT
 from .extensions import socketio, db
 from .models import User, Workshop, WorkshopParticipant, ChatMessage, BrainstormTask, BrainstormIdea, IdeaCluster, IdeaVote # Add Cluster/Vote
 from sqlalchemy import func # For counting votes
+
+# --- ADDED: Import Moderator functions ---
+from app.service.routes.moderator import initialize_participant_tracking, cleanup_participant_tracking
+# -----------------------------------------
+
 # ---------------------------------------------------------------------------
 # In‑memory presence tracking
 # ---------------------------------------------------------------------------
@@ -214,6 +219,13 @@ def _on_disconnect():
         # Check if room still exists in presence tracking before discarding
         if room in _room_presence:
             _room_presence[room].discard(user_id)
+            
+            # --- ADDED: Cleanup Moderator Tracking ---
+            if workshop_id and user_id:
+                 cleanup_participant_tracking(workshop_id, user_id)
+            # -----------------------------------------
+            
+            
             current_app.logger.debug(f"Client {request.sid} disconnected from {room} (user {user_id})")
             # Check if room still has participants before broadcasting
             if _room_presence[room]:
@@ -268,6 +280,11 @@ def _on_join_room(data):
     # --- Broadcast updated participant list ---
     _broadcast_participant_list(room, workshop_id)
 
+    # --- ADDED: Initialize Moderator Tracking ---
+    initialize_participant_tracking(workshop_id, user_id)
+    # ------------------------------------------
+    
+    
     # --- Load and emit persistent data TO THE JOINING CLIENT ONLY ---
     # Use a try-except block for database access
     try:
@@ -407,6 +424,12 @@ def _on_leave_room(data):
     # Remove the specific SID that emitted leave_room
     if sid in _sid_registry:
         _sid_registry.pop(sid)
+        # --- ADDED: Cleanup Moderator Tracking ---
+        if workshop_id and user_id:
+            cleanup_participant_tracking(workshop_id, user_id)
+        # -----------------------------------------
+        
+        
         current_app.logger.info(f"User {user_id} (SID: {sid}) left {room}")
     else:
          current_app.logger.warning(f"SID {sid} emitted leave_room but was not in registry for room {room}.")

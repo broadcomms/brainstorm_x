@@ -560,7 +560,7 @@ function startCountdown(remainingSeconds, originalDuration) {
 
 
     // --- Update AI Facilitator Area ---
-    elements.taskTitle.textContent = data.title || "Workshop Task";
+    elements.taskTitle.textContent = data.title || "Introduction and warm-up";
     elements.taskBody.innerHTML = ''; // Clear previous body
 
     // --- Populate Task Body based on Type ---
@@ -1033,6 +1033,37 @@ function startCountdown(remainingSeconds, originalDuration) {
        if (elements.nextTaskBtn) elements.nextTaskBtn.style.display = 'none';
    });
 
+      // --- ADDED: Moderator Nudge Handler ---
+      socket.on('moderator_nudge', (data) => {
+       // Check if the nudge is for the current user
+       if (data.target_user_id === userId) {
+           console.log("[Moderator] Received nudge:", data.message);
+           displayNotification(data.message);
+       }
+   });
+
+   function displayNotification(message) {
+       const notificationArea = document.getElementById('notification-area');
+       if (!notificationArea) return;
+
+       const notificationId = `notif-${Date.now()}`;
+       const notificationDiv = document.createElement('div');
+       notificationDiv.id = notificationId;
+       notificationDiv.className = 'alert alert-info alert-dismissible fade show shadow-sm'; // Use Bootstrap alert classes
+       notificationDiv.setAttribute('role', 'alert');
+       notificationDiv.innerHTML = `
+           ${message}
+           <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+       `;
+
+       notificationArea.appendChild(notificationDiv);
+
+       // Automatically remove the notification after 10 seconds
+       setTimeout(() => {
+           const element = document.getElementById(notificationId);
+           if (element) bootstrap.Alert.getOrCreateInstance(element).close(); // Use Bootstrap's JS to close
+       }, 10000); // 10 seconds
+   }
 
 
 

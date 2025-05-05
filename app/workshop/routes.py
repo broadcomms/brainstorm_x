@@ -115,6 +115,14 @@ from app.sockets import (
     _broadcast_participant_list
 )
 
+# --- ADDED: Import Moderator functions ---
+from app.service.routes.moderator import check_and_nudge, clear_workshop_tracking
+# --- Need access to presence tracking from sockets ---
+from app.sockets import _room_presence
+# -----------------------------------------
+
+
+
 from app.config import TASK_SEQUENCE # <-- Import from config
 
 # --- Import New Service Payload Functions ---
@@ -1579,7 +1587,8 @@ def stop_workshop(workshop_id):
     workshop.timer_paused_at = None
     workshop.timer_elapsed_before_pause = 0
     # workshop.current_task_index = None # Keep index if needed for report?
-
+    clear_workshop_tracking(workshop_id) # Clear moderator tracking
+    
     db.session.commit()
 
     emit_workshop_stopped(f"workshop_room_{workshop_id}", workshop_id) # Use helper emitter
@@ -1944,6 +1953,12 @@ def submit_idea(workshop_id):
             "idea_id": idea.id,
             "task_id": task.id
         }, room=f"workshop_room_{workshop_id}")
+        
+        # --- ADDED: Call Moderator ---
+        room_name = f"workshop_room_{workshop_id}"
+        current_participants = list(_room_presence.get(room_name, set()))
+        check_and_nudge(workshop_id, current_user.user_id, current_participants)
+        # ---------------------------
 
         return jsonify(success=True, idea_id=idea.id), 200
 
