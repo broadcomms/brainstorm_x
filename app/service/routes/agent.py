@@ -306,7 +306,7 @@ llm = ChatWatsonx(
 #-----------------------------------------------------------
 # # System message template
 system_message = """
-                You are a virtual meeting assistant.
+                You are a virtual workshop assistant.
                 """
 #-----------------------------------------------------------
 # # Conversational workflow
@@ -418,7 +418,7 @@ pdf_qa_tool = Tool(
 # # Action Item Generation Tool
 def mark_action_item_tool_func(workshop_id: int, description: str) -> str:
     """
-    Adds an action item to the meeting and emits a socket event.
+    Adds an action item to the workshop and emits a socket event.
     """
     action_item = ActionItem(
         workshop_id=workshop_id,
@@ -439,7 +439,7 @@ def mark_action_item_tool_func(workshop_id: int, description: str) -> str:
             "status": action_item.status,
             "priority": action_item.priority
         }
-    }, room=f"meeting_{workshop_id}")
+    }, room=f"workshop_{workshop_id}")
 
     return f"Action item added: {description}"
 
@@ -468,15 +468,15 @@ def create_agent_executor(workshop_id):
 # # Process User Query
 def process_user_query(workshop_id, user_query):
     print("PROCESSING USER QUERY") # DEBUG CODE
-    meeting, pre_meeting_data = aggregate_pre_meeting_data(workshop_id)
+    pre_workshop_data = aggregate_pre_workshop_data(workshop_id)
     print("AGGREGATE DATA ACQUIRED")
     agent_executor = create_agent_executor(workshop_id)
     
     prompt = f"""
     You are a helpful virtual assistant for a workshop.
 
-    Meeting Context:
-    {pre_meeting_data}
+    workshop Context:
+    {pre_workshop_data}
 
     User Query:
     {user_query}
@@ -549,8 +549,8 @@ def chat():
         "message": agent_response,
         "type": "unified",
         "username": "Agent"
-    }, room=f"meeting_{workshop_id}", namespace="/agent") 
-    current_app.logger.info(f"Agent response emitted to meeting_{workshop_id}")
+     }, room=f"workshop_room_{workshop_id}", namespace="/agent")
+    current_app.logger.info(f"Agent response emitted to workshop_{workshop_id}")
 
     return jsonify({"ok": True}), 200
 

@@ -36,23 +36,25 @@
 
 
     {# Invitation Response Block #}
-    {% for p in participants %}
-      {% if p.user_id == current_user.user_id and p.status == 'invited' %}
+    {# Use the flag passed from the route #}
+    {% if user_is_invited %}
         <div class="alert alert-warning d-flex justify-content-between align-items-center">
           <span>You’ve been invited to this workshop. Will you join?</span>
           <div>
-            <a href="{{ url_for('workshop_bp.respond_invitation', token=p.invitation_token, action='accept') }}"
+            {# Need the participant record to get the token - find it again or pass it #}
+            {% set current_user_p_record = participants | selectattr('user_id', 'equalto', current_user.user_id) | first %}
+            <a href="{{ url_for('workshop_bp.respond_invitation', token=current_user_p_record.invitation_token, action='accept') }}"
                class="btn btn-sm btn-success me-2">
                Accept
             </a>
-            <a href="{{ url_for('workshop_bp.respond_invitation', token=p.invitation_token, action='decline') }}"
+            a href="{{ url_for('workshop_bp.respond_invitation', token=current_user_p_record.invitation_token, action='decline') }}"
                class="btn btn-sm btn-danger">
                Decline
             </a>
           </div>
         </div>
       {% endif %}
-    {% endfor %}
+
 
 
     <!-- Workshop Details -->
@@ -251,18 +253,10 @@
                     <span class="text-muted">Workshop Status: {{ workshop.status | capitalize }}</span>
                 {% endif %}
             {% endif %}
-
-            {# --- Participant Controls --- #}
-            {# Check if current user is *any* participant first #}
-            {% set is_participant = namespace(value=false) %}
-            {% for p in workshop.participants %}
-                {% if p.user_id == current_user.user_id %}
-                    {% set is_participant.value = true %}
-                {% endif %}
-            {% endfor %}
-
-            {% if is_participant.value and current_user.user_id != workshop.created_by_id %} {# Is a participant  #}
-                 {% if workshop.status == 'scheduled' or workshop.status == 'inprogress' or workshop.status == 'paused' %}
+            {# Use the specific flag for accepted, non-organizer participants #}
+            {% if user_is_accepted_participant %}
+                 {# Show Join/Report button based on workshop status #}
+                  {% if workshop.status == 'scheduled' or workshop.status == 'inprogress' or workshop.status == 'paused' %}
                     <a href="{{ url_for('workshop_bp.join_workshop', workshop_id=workshop.id) }}" class="btn btn-primary">
                         <i class="bi bi-door-open-fill"></i> Join Workshop 
                     </a>

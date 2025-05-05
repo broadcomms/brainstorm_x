@@ -502,6 +502,21 @@ def view_workshop(workshop_id):
     # Check if the current user is the organizer
     user_is_organizer = is_organizer(workshop, current_user)
 
+
+
+        # --- ADDED: Check current user's specific participation status ---
+    current_user_participant = WorkshopParticipant.query.filter_by(
+        workshop_id=workshop.id, user_id=current_user.user_id
+    ).first()
+
+    user_is_accepted_participant = (current_user_participant is not None and
+                                    current_user_participant.status == 'accepted' and
+                                    not user_is_organizer) # Exclude organizer from this specific flag
+    user_is_invited = (current_user_participant is not None and current_user_participant.status == 'invited')
+    # -----------------------------------------------------------------
+    
+    
+    
     # Prepare participant data
     participants = workshop.participants.all()
 
@@ -541,7 +556,9 @@ def view_workshop(workshop_id):
         potential_participants=potential_participants,
         available_documents=available_documents,
         linked_documents=linked_docs,
-        user_is_organizer=user_is_organizer# Pass raw JSON string for JS
+        user_is_organizer=user_is_organizer,
+        user_is_accepted_participant=user_is_accepted_participant, # Pass new flag
+        user_is_invited=user_is_invited, # Pass new flag
     )
 
 

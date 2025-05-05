@@ -252,11 +252,12 @@
   <script>
     // Connect to the Socket.IO server
     const agentSocket = io("/agent"); 
-    meetingId = window.config ? window.config.meetingId : null;
-    if (meetingId) {
-      agentSocket.emit('join', { room: 'meeting_' + meetingId });
+    workshopId = window.config ? window.config.workshopId : null;
+    if (typeof workshopId !== 'undefined' && workshopId) {
+      // Use the same room name as the main workshop room
+      agentSocket.emit('join', { room: `workshop_room_${workshopId}` });
     } else {
-      agentSocket.emit('join', { room: 'meeting_0'});
+      console.warn("Agent Chat: workshopId not found. Cannot join specific room.");
     }
   
     // Listen for agent responses from the server
@@ -297,13 +298,13 @@
       chatInputField.value = "";
       
       // Send the message via AJAX POST
-      fetch(`/agent/chat_message`, {
+      fetch(`/agent/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: message,
-          meeting_id: meetingId || 0,  // or pass whatever you track in your JS
-          //user_id: userId || 0         // same if you track user ID client-side
+          workshop_id: typeof workshopId !== 'undefined' ? workshopId : 0, // Use workshopId
+          user_id: typeof userId !== 'undefined' ? userId : 0
         })
       })
       .then(response => response.json())
