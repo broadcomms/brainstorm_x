@@ -1,13 +1,21 @@
 # Brainstorm X
 
-**Brainstorm X is an ai-embedded collaborative brainstorming platform designed to streamline workshop planning, executing and follow-up. It enables organizers to create structured workshops, manage participants and documents. It leverages the Granite 3.3 series of foundation models to generate workshop agenda, action plans, session rules, icebreakers, tips and even nudges participants to encourage engagement. The application has the ability to moderate voting and idea prioritization, access the feasibility of proposed idea and forecast the market trends**
+Brainstorm X is an ai-embedded collaborative brainstorming platform designed to streamline workshop planning, executing and follow-up. It enables organizers to create structured workshops, manage participants and documents. It leverages the Granite 3.3 series of foundation models to generate workshop agenda, action plans, session rules, icebreakers, tips and even nudges participants to encourage engagement. The application has the ability to moderate voting and idea prioritization, access the feasibility of proposed idea and forecast the market trends.
 
-## Key features #TODO: add more after development
+## Key features
 The solution performs the following operations:
-1. 
+1. Manages workshop participants and documents
+2. Captures and organizes participants inputs in to digital colored sticky notes
+3. Enhances participants inputs into clear, problem and solution statements
+4. Automatically creates workshop agenda, task sequence, session rules, icebreakers, tips
+5. Monitors inactivity and nudges silent participants to encourage engagement
+6. Clusters and facilitates timed voting pools and idea prioritization
+7. Accesses the feasibility of proposed idea
+8. Forecasts the market trends
+9. Synthesizes workshop minutes, transcripts, summaries and action items
 
 ## Architecture
-The application is implemented with Python and JavaScript using Flask, LangChain libraries, IBM Granite 3.3 Models.
+The application is implemented with Python and JavaScript using Flask, LangChain libraries and IBM Granite 3.3 foundation models.
 
 ## Structure
 
@@ -88,7 +96,6 @@ app/
             service_task.html
             service_nudge.html
             service_vote.html
-            service_idea.html
             service_agent.html
 instance
    app_database.sqlite
