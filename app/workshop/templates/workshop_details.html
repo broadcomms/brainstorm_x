@@ -620,10 +620,10 @@
     }
     
     /* --- Helpers ------------------------------------------------------- */
-    function updateAiContentElement (type, html) {
-      const el = document.getElementById(`${type}-content-display`);
-      if (el) el.innerHTML = html;
-    }
+    function updateAiContentElement(type, html) {
+    const el = document.getElementById(`${type}-content-display`);
+    if (el) el.innerHTML = html;
+}
 </script>
 
 <script>
@@ -634,11 +634,11 @@
 
   // Listen for the same 'ai_content_update' event to refresh the agenda
   socket.on('ai_content_update', (data) => {
-      console.log('[Details] AI content update received:', data);
-      if (data.workshop_id === workshopId && data.type === 'agenda' && data.content) {
-          updateAiContentElement('agenda', data.content);
-      }
-  });
+    console.log('[Details] AI content update received:', data);
+    if (data.workshop_id === workshopId && data.type === 'agenda' && data.content) {
+        updateAiContentElement('agenda', data.content);
+    }
+});
 
 </script>
 
